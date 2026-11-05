@@ -45,6 +45,9 @@
   --font-wc: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
   --font-wc-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --font-heading: var(--font-wc);
+  --font-body: var(--font-wc);
+  --font-geist-mono: var(--font-wc-mono);
 }
 
 * {

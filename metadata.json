@@ -1,0 +1,11 @@
+{
+  "name": "GradeIQ — browser-native phone grading",
+  "description": "Zero-install, gamified phone testing + AI cosmetic grading. No app, no cable — the phone grades itself in its own browser.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

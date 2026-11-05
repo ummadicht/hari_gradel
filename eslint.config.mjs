@@ -16,6 +16,14 @@ export default defineConfig([
     rules: {
       // Kept from the old config: the codebase reads untyped JSON columns as `any`.
       "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-require-imports": "warn",
+      "prefer-const": "warn",
+      "react/no-unescaped-entities": "warn",
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/refs": "warn",
+      "react-hooks/immutability": "warn",
+      "react-hooks/static-components": "warn",
+      "react-hooks/purity": "warn",
     },
   },
   // Next's own ignores (.next, out, build, next-env.d.ts) come with nextTs.

@@ -35,8 +35,16 @@ export function newSid(): string {
 
 export function insertSession(s: { sid: string; sub: string; email: string; name: string; role: GiqRole; clientId: string | null; id_token: string | null }): void {
   db.prepare(
-    `INSERT OR REPLACE INTO oidc_sessions (sid, sub, email, name, role, client_id, id_token, created_at)
-     VALUES (?,?,?,?,?,?,?,?)`
+    `INSERT INTO oidc_sessions (sid, sub, email, name, role, client_id, id_token, created_at)
+     VALUES (?,?,?,?,?,?,?,?)
+     ON CONFLICT(sid) DO UPDATE SET
+       sub = excluded.sub,
+       email = excluded.email,
+       name = excluded.name,
+       role = excluded.role,
+       client_id = excluded.client_id,
+       id_token = excluded.id_token,
+       created_at = excluded.created_at`
   ).run(s.sid, s.sub, s.email, s.name, s.role, s.clientId, s.id_token, Math.floor(Date.now() / 1000));
 }
 
@@ -103,6 +111,7 @@ export function oidcCutoverAt(): number | null {
 
 export function markOidcCutover(): void {
   db.prepare(
-    `INSERT OR IGNORE INTO auth_state (key, value, at) VALUES ('oidc_cutover', 'first keycloak sign-in', ?)`
+    `INSERT INTO auth_state (key, value, at) VALUES ('oidc_cutover', 'first keycloak sign-in', ?)
+     ON CONFLICT(key) DO NOTHING`
   ).run(Math.floor(Date.now() / 1000));
 }

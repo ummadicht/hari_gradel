@@ -24,36 +24,28 @@ export async function GET(req: NextRequest) {
     args = [scope.clientId];
   }
 
-  const rows = db
+  const rawRows = db
     .prepare(
       `SELECT id, imei, model, status, client_id, cosmetic_grade, overall_grade,
-              json_extract(cosmetic,'$.tierUsed') AS tier,
-              json_extract(cosmetic,'$.needsHumanReview') AS review,
-              json_extract(capture,'$.verdict') AS capture_verdict,
-              json_array_length(photos) AS photo_count,
-              -- Storage and colour come from the SELLER's own answer, not the
-              -- IMEI: a TAC identifies make and model but never capacity or
-              -- finish, so there is nowhere else to read them from.
-              json_extract(device,'$.storageText') AS storage,
-              json_extract(device,'$.color') AS color,
-              -- Journey position is DERIVED, never a column: the app writes
-              -- the status column at three points and that has never described
-              -- where a phone actually stopped. These are the raw inputs; the
-              -- ladder lives in lib/sessionStage.ts, testable and single-sourced.
-              functional, offer, accepted,
-              json_extract(ocr,'$.imei')      AS ocr_imei,
-              json_array_length(json_extract(ocr,'$.shots')) AS ocr_shots,
-              json_extract(camera,'$.assessment') AS camera_assessment,
-              json_extract(profile,'$.photoTarget') AS photo_target,
-              created_at, updated_at
+              cosmetic, capture, photos, device, functional, offer, accepted,
+              ocr, camera, profile, created_at, updated_at
        FROM sessions ${where} ORDER BY updated_at DESC LIMIT ?`,
     )
     .all(...args, limit) as Record<string, any>[];
 
+  const parse = (v: unknown) => {
+    if (!v || typeof v !== "string") return null;
+    try {
+      return JSON.parse(v);
+    } catch {
+      return null;
+    }
+  };
+
   // Capture-attempt outcomes per session, fetched in ONE query rather than per
   // row — the monitor lists up to `limit` sessions and an N+1 here would show
   // up immediately on a 63MB-RAM box.
-  const ids = rows.map((r) => r.id);
+  const ids = rawRows.map((r) => r.id);
   const outcomes = new Map<string, string[]>();
   if (ids.length) {
     try {
@@ -73,38 +65,68 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const parse = (v: unknown) => {
-    if (!v || typeof v !== "string") return null;
-    try {
-      return JSON.parse(v);
-    } catch {
-      return null;
-    }
-  };
+  const sessions = rawRows.map((r) => {
+    const cosmeticObj = parse(r.cosmetic);
+    const captureObj = parse(r.capture);
+    const photosArr = parse(r.photos);
+    const deviceObj = parse(r.device);
+    const ocrObj = parse(r.ocr);
+    const cameraObj = parse(r.camera);
+    const profileObj = parse(r.profile);
 
-  const sessions = rows.map((r) => {
+    const tier = cosmeticObj?.tierUsed ?? null;
+    const review =
+      cosmeticObj?.needsHumanReview === undefined || cosmeticObj?.needsHumanReview === null
+        ? null
+        : cosmeticObj.needsHumanReview
+          ? 1
+          : 0;
+    const capture_verdict = captureObj?.verdict ?? null;
+    const photo_count = Array.isArray(photosArr) ? photosArr.length : null;
+    const storage = deviceObj?.storageText ?? null;
+    const color = deviceObj?.color ?? null;
+    const ocr_imei = ocrObj?.imei ?? null;
+    const ocr_shots = Array.isArray(ocrObj?.shots) ? ocrObj.shots.length : null;
+    const camera_assessment = cameraObj?.assessment ?? null;
+    const photo_target = profileObj?.photoTarget ?? null;
+
     const { stage, tags } = describeSession({
       imei: r.imei,
       model: r.model,
-      photoCount: r.photo_count,
-      photoTarget: r.photo_target,
-      captureVerdict: r.capture_verdict,
+      photoCount: photo_count,
+      photoTarget: photo_target,
+      captureVerdict: capture_verdict,
       functional: parse(r.functional),
       cosmeticGrade: r.cosmetic_grade,
-      review: r.review,
+      review,
       offer: parse(r.offer),
       accepted: r.accepted,
-      ocrImei: r.ocr_imei,
-      ocrShots: r.ocr_shots,
-      cameraAssessment: parse(r.camera_assessment),
+      ocrImei: ocr_imei,
+      ocrShots: ocr_shots,
+      cameraAssessment: camera_assessment,
       captureOutcomes: outcomes.get(r.id) ?? [],
       updatedAt: r.updated_at,
     });
-    // The raw JSON blobs were only ever inputs to the derivation — sending them
-    // to the browser would put a seller's functional results and offer into a
-    // list view that has no use for them.
-    const { functional, offer, accepted, camera_assessment, ocr_imei, ocr_shots, photo_target, ...rest } = r;
-    return { ...rest, stage, tags };
+
+    return {
+      id: r.id,
+      imei: r.imei,
+      model: r.model,
+      status: r.status,
+      client_id: r.client_id,
+      cosmetic_grade: r.cosmetic_grade,
+      overall_grade: r.overall_grade,
+      tier,
+      review,
+      capture_verdict,
+      photo_count,
+      storage,
+      color,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      stage,
+      tags,
+    };
   });
 
   return NextResponse.json({ sessions });

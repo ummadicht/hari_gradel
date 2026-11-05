@@ -199,7 +199,9 @@ export function recordCapture(t: CaptureTelemetryInput): RecordResult {
   } catch (e) {
     // A UNIQUE violation on event_id is the idempotency key doing its job, not
     // a fault — the same event arrived twice and the second one is discarded.
-    if (String((e as Error)?.message || "").includes("UNIQUE")) {
+    const msg = String((e as Error)?.message || "");
+    const code = (e as { code?: string })?.code;
+    if (msg.includes("UNIQUE") || /duplicate key/i.test(msg) || code === "23505") {
       return { ok: false, reason: "duplicate" };
     }
     return { ok: false, reason: "error" };

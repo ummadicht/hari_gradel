@@ -123,7 +123,7 @@ type Outcome = "paid" | "skipped" | "ceiling";
 function bump(day: string, g: LookupGrant, outcome: Outcome, by: number): void {
   db.prepare(
     `INSERT INTO paid_lookups (day, ip, caller, outcome, n) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(day, ip, caller, outcome) DO UPDATE SET n = MAX(0, n + excluded.n)`
+     ON CONFLICT(day, ip, caller, outcome) DO UPDATE SET n = CASE WHEN paid_lookups.n + excluded.n > 0 THEN paid_lookups.n + excluded.n ELSE 0 END`
   ).run(day, g.ip, g.caller, outcome, by);
 }
 
@@ -227,7 +227,7 @@ export function paidLookupStats(now: number = Date.now()): PaidLookupStats {
   const totalCap = anonLookupTotalCap();
   const atCap = db
     .prepare(
-      "SELECT COUNT(*) AS n FROM (SELECT ip FROM paid_lookups WHERE day = ? AND caller = 'channel' AND outcome = 'paid' GROUP BY ip HAVING SUM(n) >= ?)"
+      "SELECT COUNT(*) AS n FROM (SELECT ip FROM paid_lookups WHERE day = ? AND caller = 'channel' AND outcome = 'paid' GROUP BY ip HAVING SUM(n) >= ?) AS sub"
     )
     .get(day, cap) as { n: number };
   return {
@@ -322,7 +322,7 @@ function countCalls(win: string, scope: Scope, k: string): number {
 function bumpCalls(win: string, scope: Scope, k: string, outcome: "allowed" | "refused"): void {
   db.prepare(
     `INSERT INTO call_budget (budget, win, scope, k, outcome, n) VALUES (?, ?, ?, ?, ?, 1)
-     ON CONFLICT(budget, win, scope, k, outcome) DO UPDATE SET n = n + 1`
+     ON CONFLICT(budget, win, scope, k, outcome) DO UPDATE SET n = call_budget.n + 1`
   ).run(UPLOADS, win, scope, k, outcome);
 }
 

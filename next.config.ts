@@ -5,8 +5,9 @@ import type { NextConfig } from "next";
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || "";
 
 const nextConfig: NextConfig = {
-  // better-sqlite3 is a native module — keep it out of the server bundler.
-  serverExternalPackages: ["better-sqlite3"],
+  output: "standalone",
+  // better-sqlite3 and pg are server-only database drivers — keep them out of the bundler.
+  serverExternalPackages: ["better-sqlite3", "pg"],
   ...(basePath ? { basePath, assetPrefix: basePath } : {}),
 };
 

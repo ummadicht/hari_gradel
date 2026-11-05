@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { createPostgresDb, getPostgresUrl } from "./pgAdapter";
 
 // Single shared connection (cached across hot-reloads in dev).
 const g = globalThis as unknown as { __gradeiq_db?: Database.Database };
@@ -10,8 +11,13 @@ function init(): Database.Database {
   const dir = path.join(process.cwd(), "data");
   fs.mkdirSync(dir, { recursive: true });
   fs.mkdirSync(path.join(dir, "uploads"), { recursive: true });
-  const db = new Database(path.join(dir, "gradeiq.db"));
-  db.pragma("journal_mode = WAL");
+  const pgUrl = getPostgresUrl();
+  const db: Database.Database = pgUrl
+    ? createPostgresDb(pgUrl)
+    : new Database(path.join(dir, "gradeiq.db"));
+  if (!pgUrl) {
+    db.pragma("journal_mode = WAL");
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
