@@ -98,17 +98,89 @@ export async function POST(req: NextRequest) {
     id = newSessionId();
   }
 
+  const phone = String(body.phone ?? body.customerPhone ?? "").replace(/[^\d+]/g, "").slice(0, 20);
+  const recordedAt = String(body.recordedAt ?? body.datetime ?? new Date().toISOString()).slice(0, 40);
+  const timezone =
+    String(
+      body.timezone ??
+        req.headers.get("x-timezone") ??
+        req.headers.get("x-vercel-ip-timezone") ??
+        "UTC"
+    )
+      .trim()
+      .slice(0, 64) || "UTC";
+
+  const { resolveClient } = await import("@/lib/clients");
+  const { getSetting } = await import("@/lib/settings");
+  const clientDef = resolveClient(clientId);
+  const storeId = String(body.storeId ?? body.store?.id ?? `${clientId}-${channel}`).trim().slice(0, 64);
+  const storeName = String(body.storeName ?? body.store?.name ?? clientDef.name).trim().slice(0, 120);
+  const storeInfo: Record<string, unknown> = {
+    storeId,
+    storeName,
+    branch: String(body.storeBranch ?? body.store?.branch ?? channel).slice(0, 80),
+    storePhone: String(body.storePhone ?? body.store?.phone ?? phone).slice(0, 24),
+    address: String(body.storeAddress ?? body.store?.address ?? "").slice(0, 160),
+    city: String(body.storeCity ?? body.store?.city ?? "").slice(0, 64),
+    vpa: getSetting(`payout_vpa:${clientId}`) || "",
+    currency: clientDef.currency,
+    channel,
+    purchaseId: purchaseId || null,
+    phone,
+    imei,
+    model,
+    recordedAt,
+    timezone,
+    ...(body.store && typeof body.store === "object" ? body.store : {}),
+  };
+
   db.prepare(
-    "INSERT INTO sessions (id, imei, model, profile, imei_info, phonecheck, client_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    `INSERT INTO sessions (
+       id, imei, phone, model, profile, imei_info, phonecheck, client_id,
+       recorded_at, timezone, store_id, store_name, store_info
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     imei,
+    phone,
     model,
     JSON.stringify(profile),
     JSON.stringify(imeiInfo ?? {}),
     JSON.stringify(phonecheck ?? {}),
-    clientId
+    clientId,
+    recordedAt,
+    timezone,
+    storeId,
+    storeName,
+    JSON.stringify(storeInfo)
   );
+
+  try {
+    db.prepare(
+      `INSERT INTO stores (id, client_id, store_name, branch, phone, address, city, timezone, vpa, store_info)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         store_name = CASE WHEN excluded.store_name <> '' THEN excluded.store_name ELSE stores.store_name END,
+         branch = CASE WHEN excluded.branch <> '' THEN excluded.branch ELSE stores.branch END,
+         phone = CASE WHEN excluded.phone <> '' THEN excluded.phone ELSE stores.phone END,
+         timezone = CASE WHEN excluded.timezone <> '' AND excluded.timezone <> 'UTC' THEN excluded.timezone ELSE stores.timezone END,
+         store_info = excluded.store_info,
+         updated_at = datetime('now')`
+    ).run(
+      storeId,
+      clientId,
+      storeName,
+      String(storeInfo.branch || ""),
+      String(storeInfo.storePhone || ""),
+      String(storeInfo.address || ""),
+      String(storeInfo.city || ""),
+      timezone,
+      String(storeInfo.vpa || ""),
+      JSON.stringify(storeInfo)
+    );
+  } catch {
+    /* non-blocking store sync */
+  }
 
   // Tie the check to its retail purchase (lazy import keeps the consumer path
   // from touching the purchase tables at all). GUARDED: linking requires an
@@ -139,6 +211,10 @@ export async function POST(req: NextRequest) {
     segment: profile.segment,
     ua: (profile as any).origin?.ua?.slice(0, 160),
     ip: (profile as any).origin?.ip,
+    phone: phone || undefined,
+    imei: imei || undefined,
+    timezone,
+    storeId,
   });
   if (imei) {
     logEvent(id, "device-identification", imeiInfo?.model ? "identified" : "imei-entered", {
@@ -149,7 +225,21 @@ export async function POST(req: NextRequest) {
     if (imeiInfo?.skipped) logEvent(id, "device-identification", "lookup-skipped", { reason: imeiInfo.skipped });
   }
 
-  return NextResponse.json({ id, imei, model, profile, imeiInfo, phonecheck, client: clientId });
+  return NextResponse.json({
+    id,
+    imei,
+    phone,
+    model,
+    profile,
+    imeiInfo,
+    phonecheck,
+    client: clientId,
+    recordedAt,
+    timezone,
+    storeId,
+    storeName,
+    storeInfo,
+  });
 }
 
 // GET /api/sessions  -> recent sessions for the staff dashboard

@@ -46,6 +46,9 @@ const TABLES = [
   "capture_telemetry",
   "purchases",
   "credit_ledger",
+  "sensor_scans",
+  "stores",
+  "diagnostic_reports",
 ];
 
 const SERIAL_TABLES = [
@@ -55,6 +58,8 @@ const SERIAL_TABLES = [
   "compliance_events",
   "capture_telemetry",
   "credit_ledger",
+  "sensor_scans",
+  "diagnostic_reports",
 ];
 
 async function main() {

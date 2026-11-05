@@ -1,21 +1,41 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 import { withBase } from "@/lib/basePath";
 import { sessionAlias } from "@/lib/sessionAlias";
 import {
   reachedFunnel,
   exceptions as deriveExceptions,
   STAGE_LABEL,
-  SEVERITY_RANK,
   type Stage,
   type SessionTag,
   type Severity,
 } from "@/lib/sessionStage";
+import { FUNCTIONAL_TESTS } from "@/lib/tests";
+import {
+  generateSummaryPdf,
+  type DiagnosticSummaryData,
+} from "@/lib/summaryPdf";
+import type { SensorScanReport } from "@/lib/sensorScan";
+import SensorScanner, { type StoreContextMetadata } from "@/app/components/SensorScanner";
 
 type Session = {
   id: string;
   imei: string;
+  phone?: string;
   model: string;
   status: string;
   cosmetic_grade: string;
@@ -26,8 +46,13 @@ type Session = {
   /** Derived server-side — the SAME derivation the session monitor renders. */
   stage: Stage;
   tags: SessionTag[];
+  recorded_at?: string;
+  timezone?: string;
+  store_id?: string;
+  store_name?: string;
   created_at: string;
   updated_at: string;
+  functional_summary?: { pass: number; fail: number; skip: number };
 };
 
 type Purchase = {
@@ -40,15 +65,15 @@ type Purchase = {
 type LoadState = {
   sessions: Session[];
   purchases: Purchase[];
+  diagnostics: DiagnosticSummaryData;
 };
 
-/**
- * `riskFor()` used to live here — a FOURTH opinion on the same facts. It scored
- * `photo_count < 4` as an evidence gap while the funnel directly beside it
- * counted `>= 4` as complete, and neither agreed with the server capture gate
- * that actually decides. Severity now comes from lib/sessionStage.ts, so the
- * dashboard, the exception queue and the session monitor cannot drift apart.
- */
+const OUTCOME_COLORS = {
+  pass: "#16A34A",
+  fail: "#DC2626",
+  skip: "#D97706",
+};
+
 const SEVERITY_TONE: Record<Severity, string> = {
   hold: "chip-red",
   review: "chip-red",
@@ -64,6 +89,20 @@ const SEVERITY_LABEL: Record<Severity, string> = {
   normal: "Normal",
 };
 
+function emptyDiagnostics(): DiagnosticSummaryData {
+  return {
+    summary: { pass: 0, fail: 0, skip: 0, total: 0, sessionsTested: 0 },
+    byTest: FUNCTIONAL_TESTS.map((t) => ({
+      id: t.id,
+      name: t.name,
+      pass: 0,
+      fail: 0,
+      skip: 0,
+      total: 0,
+    })),
+  };
+}
+
 export default function CommandCenter({
   clientId,
   onOpenSession,
@@ -75,6 +114,9 @@ export default function CommandCenter({
 }) {
   const [data, setData] = useState<LoadState | null>(null);
   const [error, setError] = useState("");
+  const [chartMode, setChartMode] = useState<"distribution" | "byTest">("distribution");
+  const [latestSensorScan, setLatestSensorScan] = useState<SensorScanReport | null>(null);
+  const [storeMeta, setStoreMeta] = useState<StoreContextMetadata | null>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -84,9 +126,12 @@ export default function CommandCenter({
         fetch(withBase(`/api/retail/overview?client=${encodeURIComponent(clientId)}`)),
       ]);
       if (!sessionRes.ok) throw new Error("Could not load inspections.");
-      const sessions = (await sessionRes.json()).sessions ?? [];
+      const sessionJson = await sessionRes.json();
+      const sessions: Session[] = sessionJson.sessions ?? [];
+      const diagnostics: DiagnosticSummaryData =
+        sessionJson.diagnostics ?? emptyDiagnostics();
       const purchases = retailRes.ok ? ((await retailRes.json()).purchases ?? []) : [];
-      setData({ sessions, purchases });
+      setData({ sessions, purchases, diagnostics });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load operations.");
     }
@@ -102,19 +147,152 @@ export default function CommandCenter({
   const view = useMemo(() => {
     const sessions = data?.sessions ?? [];
     const today = new Date().toISOString().slice(0, 10);
+    const baseDiag = data?.diagnostics ?? emptyDiagnostics();
+
+    // If no DB sessions have functional outcomes yet for this client, include
+    // any live console sensor scan in the active preview so the chart is
+    // immediately populated even before the operator saves the session.
+    const hasDbDiag = baseDiag.summary.total > 0;
+    const activeSummary =
+      hasDbDiag || !latestSensorScan
+        ? baseDiag.summary
+        : {
+            pass: latestSensorScan.summary.pass,
+            fail: latestSensorScan.summary.fail,
+            skip: latestSensorScan.summary.skip,
+            total: latestSensorScan.summary.total,
+            sessionsTested: 1,
+          };
+
+    const activeByTest =
+      hasDbDiag || !latestSensorScan
+        ? baseDiag.byTest
+        : latestSensorScan.items.map((it) => ({
+            id: it.id,
+            name: it.name,
+            pass: it.status === "pass" ? 1 : 0,
+            fail: it.status === "fail" ? 1 : 0,
+            skip: it.status === "skip" ? 1 : 0,
+            total: 1,
+          }));
+
+    const distributionData = [
+      {
+        name: "Pass",
+        outcome: "Pass",
+        count: activeSummary.pass,
+        fill: OUTCOME_COLORS.pass,
+      },
+      {
+        name: "Fail",
+        outcome: "Fail",
+        count: activeSummary.fail,
+        fill: OUTCOME_COLORS.fail,
+      },
+      {
+        name: "Skip",
+        outcome: "Skip",
+        count: activeSummary.skip,
+        fill: OUTCOME_COLORS.skip,
+      },
+    ];
+
     return {
       today: sessions.filter((s) => (s.created_at || s.updated_at).startsWith(today)).length,
-      // Cumulative, because this panel is a CONVERSION view: "how many reached
-      // at least this far". The session monitor shows the terminal version of
-      // the same derivation — where each phone stopped.
       funnel: reachedFunnel(sessions),
-      // The rows already carry server-derived stage + tags; severity reads them
-      // back out rather than recomputing from columns the browser never receives.
       exceptions: deriveExceptions(sessions),
+      diagnostics: {
+        summary: activeSummary,
+        byTest: activeByTest,
+        isLivePreview: !hasDbDiag && !!latestSensorScan,
+      },
+      distributionData,
     };
-  }, [data]);
+  }, [data, latestSensorScan]);
+
+  function handleDownloadPdf() {
+    if (!data) return;
+    const nowIso = new Date().toISOString();
+    const tz =
+      storeMeta?.timezone ||
+      (typeof Intl !== "undefined"
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+        : "UTC");
+
+    const latestSession = data.sessions[0];
+    const resolvedMeta = {
+      phone: storeMeta?.phone || latestSession?.phone || "",
+      imei: storeMeta?.imei || latestSession?.imei || "",
+      model: storeMeta?.model || latestSession?.model || "",
+      storeId: storeMeta?.storeId || latestSession?.store_id || `${clientId}-store-01`,
+      storeName: storeMeta?.storeName || latestSession?.store_name || clientId,
+      storeBranch: storeMeta?.storeBranch || "Main Branch",
+      storePhone: storeMeta?.storePhone || storeMeta?.phone || "",
+      storeAddress: storeMeta?.storeAddress || "",
+      timezone: tz,
+      datetime: nowIso,
+    };
+
+    void fetch(withBase("/api/sensor-scans"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-timezone": tz,
+      },
+      body: JSON.stringify({
+        action: "save-report",
+        client: clientId === "all" ? "default" : clientId,
+        sessionId: latestSession?.id || "",
+        phone: resolvedMeta.phone,
+        imei: resolvedMeta.imei,
+        model: resolvedMeta.model,
+        storeId: resolvedMeta.storeId,
+        storeName: resolvedMeta.storeName,
+        storeBranch: resolvedMeta.storeBranch,
+        storePhone: resolvedMeta.storePhone,
+        storeAddress: resolvedMeta.storeAddress,
+        scannedAt: nowIso,
+        timezone: tz,
+        totalSessions: data.sessions.length,
+        diagnostics: {
+          summary: view.diagnostics.summary,
+          byTest: view.diagnostics.byTest,
+        },
+        reportPayload: {
+          inspectionsToday: view.today,
+          totalSessions: data.sessions.length,
+          gradesIssued: view.funnel.find((f) => f.stage === "graded")?.count ?? 0,
+          openExceptions: view.exceptions.length,
+          purchasesCount: data.purchases.length,
+          diagnostics: view.diagnostics,
+          storeMeta: resolvedMeta,
+        },
+      }),
+    }).catch(() => {});
+
+    generateSummaryPdf({
+      clientId,
+      inspectionsToday: view.today,
+      totalSessions: data.sessions.length,
+      gradesIssued: view.funnel.find((f) => f.stage === "graded")?.count ?? 0,
+      openExceptions: view.exceptions.length,
+      purchasesCount: data.purchases.length,
+      funnel: view.funnel,
+      diagnostics: {
+        summary: view.diagnostics.summary,
+        byTest: view.diagnostics.byTest,
+      },
+      latestSensorScan,
+      storeMeta: resolvedMeta,
+      sessions: data.sessions,
+    });
+  }
 
   if (!data) return <div className="card p-6 text-sm text-[var(--muted)]">{error || "Loading operations…"}</div>;
+
+  const diagSummary = view.diagnostics.summary;
+  const passRate =
+    diagSummary.total > 0 ? Math.round((diagSummary.pass / diagSummary.total) * 100) : 0;
 
   return (
     <div className="space-y-5">
@@ -130,18 +308,24 @@ export default function CommandCenter({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {/* Was a link to /channel/retail, which is discontinued, and briefly
-                to CounterIQ — a SEPARATE app with its own credentials, so it
-                sent an operator to a sign-in their console login cannot pass.
-                The in-console Desk tester starts an inspection for the selected
-                client with the session they already have. */}
             <button
-              className="rounded-[980px] bg-[#0071e3] px-5 py-2.5 text-[14px] font-medium text-white"
+              className="rounded-[980px] bg-[#0071e3] px-5 py-2.5 text-[14px] font-medium text-white whitespace-nowrap shrink-0"
               onClick={onStartInspection}
             >
               Start an inspection
             </button>
-            <button className="rounded-[980px] border border-white/25 px-5 py-2.5 text-[14px] font-medium" onClick={() => void load()}>Refresh</button>
+            <button
+              className="rounded-[980px] border border-white/25 bg-white/10 px-5 py-2.5 text-[14px] font-medium text-white hover:bg-white/15 whitespace-nowrap shrink-0"
+              onClick={handleDownloadPdf}
+            >
+              Download Summary PDF
+            </button>
+            <button
+              className="rounded-[980px] border border-white/25 px-5 py-2.5 text-[14px] font-medium whitespace-nowrap shrink-0"
+              onClick={() => void load()}
+            >
+              Refresh
+            </button>
           </div>
         </div>
         <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -158,6 +342,199 @@ export default function CommandCenter({
           ))}
         </div>
       </section>
+
+      {/* Diagnostic Outcomes Summary Chart (Recharts) */}
+      <section className="card p-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-extrabold">
+              Diagnostic outcomes distribution ({clientId === "all" ? "All clients" : clientId})
+            </h3>
+            <p className="mt-1 text-[12px] text-[var(--muted)]">
+              Pass, Fail, and Skip distribution across functional hardware and sensor checks for the selected client.
+              {view.diagnostics.isLivePreview ? " Showing live console sensor scan preview." : ""}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-soft)] p-1">
+              <button
+                type="button"
+                onClick={() => setChartMode("distribution")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  chartMode === "distribution"
+                    ? "bg-[var(--card)] text-[var(--text)] shadow-xs"
+                    : "text-[var(--muted)] hover:text-[var(--text)]"
+                }`}
+              >
+                Outcome summary
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartMode("byTest")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  chartMode === "byTest"
+                    ? "bg-[var(--card)] text-[var(--text)] shadow-xs"
+                    : "text-[var(--muted)] hover:text-[var(--text)]"
+                }`}
+              >
+                By hardware check
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3.5 py-2 text-xs font-semibold text-[var(--text)] hover:bg-[var(--bg-soft)] whitespace-nowrap shrink-0"
+            >
+              Export Summary PDF
+            </button>
+          </div>
+        </div>
+
+        {/* KPI Strip */}
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-soft)] p-3.5">
+            <div className="text-[11px] font-semibold text-[var(--muted)]">Total checks</div>
+            <div className="mt-1 text-2xl font-black tabular-nums">{diagSummary.total}</div>
+          </div>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-soft)] p-3.5">
+            <div className="text-[11px] font-semibold text-[var(--muted)]">Passed</div>
+            <div className="mt-1 text-2xl font-black tabular-nums" style={{ color: OUTCOME_COLORS.pass }}>
+              {diagSummary.pass}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-soft)] p-3.5">
+            <div className="text-[11px] font-semibold text-[var(--muted)]">Failed</div>
+            <div className="mt-1 text-2xl font-black tabular-nums" style={{ color: OUTCOME_COLORS.fail }}>
+              {diagSummary.fail}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-soft)] p-3.5">
+            <div className="text-[11px] font-semibold text-[var(--muted)]">Skipped</div>
+            <div className="mt-1 text-2xl font-black tabular-nums" style={{ color: OUTCOME_COLORS.skip }}>
+              {diagSummary.skip}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-soft)] p-3.5 col-span-2 sm:col-span-1">
+            <div className="text-[11px] font-semibold text-[var(--muted)]">Pass rate</div>
+            <div className="mt-1 text-2xl font-black tabular-nums">{passRate}%</div>
+          </div>
+        </div>
+
+        {/* Recharts Visualization */}
+        {chartMode === "distribution" ? (
+          <div className="mt-5 grid items-center gap-6 lg:grid-cols-[1.25fr_.75fr]">
+            <div className="h-[280px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={view.distributionData}
+                  margin={{ top: 12, right: 20, left: 0, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.08)" />
+                  <XAxis dataKey="outcome" tick={{ fontSize: 12, fontWeight: 600 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    formatter={(value: any) => [value, "Checks"]}
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: "1px solid rgba(0,0,0,0.1)",
+                      fontSize: 12,
+                    }}
+                  />
+                  <Bar dataKey="count" name="Diagnostic Checks" radius={[8, 8, 0, 0]} maxBarSize={72}>
+                    {view.distributionData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="h-[280px] w-full">
+              {diagSummary.total > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={view.distributionData}
+                      dataKey="count"
+                      nameKey="outcome"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={58}
+                      outerRadius={92}
+                      paddingAngle={3}
+                    >
+                      {view.distributionData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value: any, name: any) => [
+                        `${value} (${Math.round((Number(value) / diagSummary.total) * 100)}%)`,
+                        name,
+                      ]}
+                      contentStyle={{
+                        borderRadius: 12,
+                        border: "1px solid rgba(0,0,0,0.1)",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Legend verticalAlign="bottom" height={32} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg-soft)] p-6 text-center">
+                  <div className="text-sm font-bold text-[var(--text)]">No diagnostic outcomes recorded yet</div>
+                  <p className="mt-1 max-w-xs text-xs text-[var(--muted)]">
+                    Run a live hardware sensor scan below or start a device inspection to populate Pass / Fail / Skip metrics for {clientId === "all" ? "all clients" : clientId}.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 h-[320px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={view.diagnostics.byTest}
+                margin={{ top: 12, right: 20, left: 0, bottom: 48 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.08)" />
+                <XAxis
+                  dataKey="name"
+                  angle={-25}
+                  textAnchor="end"
+                  interval={0}
+                  height={64}
+                  tick={{ fontSize: 11 }}
+                />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: "1px solid rgba(0,0,0,0.1)",
+                    fontSize: 12,
+                  }}
+                />
+                <Legend verticalAlign="top" height={32} />
+                <Bar dataKey="pass" name="Pass" stackId="a" fill={OUTCOME_COLORS.pass} radius={[0, 0, 0, 0]} />
+                <Bar dataKey="fail" name="Fail" stackId="a" fill={OUTCOME_COLORS.fail} radius={[0, 0, 0, 0]} />
+                <Bar dataKey="skip" name="Skip" stackId="a" fill={OUTCOME_COLORS.skip} radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
+
+      {/* Interactive Sensor Scan Suite */}
+      <SensorScanner
+        clientId={clientId}
+        onScanComplete={(report, meta) => {
+          setLatestSensorScan(report);
+          setStoreMeta(meta);
+        }}
+        onSessionSaved={() => void load()}
+        onMetadataChange={(meta) => setStoreMeta(meta)}
+      />
 
       <div className="grid items-start gap-5 xl:grid-cols-[1.35fr_.65fr]">
         <section className="card p-5">

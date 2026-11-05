@@ -11,6 +11,14 @@ type Purchase = {
   id: string;
   status: string;
   customer: { name?: string; phone?: string };
+  phone?: string;
+  imei?: string;
+  model?: string;
+  store_id?: string;
+  store_name?: string;
+  store_info?: { branch?: string; address?: string };
+  recorded_at?: string;
+  timezone?: string;
   kyc: { idType?: string; idLast4?: string };
   session_id: string;
   offer: { value?: number; currency?: string; grade?: string };
@@ -157,8 +165,10 @@ export default function RetailPanel({ clientId }: { clientId: string }) {
             <table className="w-full text-left text-[13px]">
               <thead className="text-[11px] uppercase tracking-wide text-[var(--muted)]">
                 <tr>
-                  <th className="px-5 py-2.5">Customer</th>
-                  <th className="px-3 py-2.5">By</th>
+                  <th className="px-5 py-2.5">Customer & Phone</th>
+                  <th className="px-3 py-2.5">IMEI & Model</th>
+                  <th className="px-3 py-2.5">Store & Operator</th>
+                  <th className="px-3 py-2.5">Date/Time & TZ</th>
                   <th className="px-3 py-2.5">Offer</th>
                   <th className="px-3 py-2.5">Status</th>
                   <th className="px-3 py-2.5">Payout</th>
@@ -172,9 +182,22 @@ export default function RetailPanel({ clientId }: { clientId: string }) {
                     <tr key={p.id} className="border-t border-[var(--border)]">
                       <td className="px-5 py-2.5">
                         <div className="font-bold">{p.customer?.name || "—"}</div>
-                        <div className="text-[11px] text-[var(--muted)]">{p.customer?.phone} · #{p.id.slice(2, 8)}</div>
+                        <div className="text-[11px] text-[var(--muted)]">{p.phone || p.customer?.phone || "—"} · #{p.id.slice(2, 8)}</div>
                       </td>
-                      <td className="px-3 py-2.5 text-[var(--muted)]">{p.created_by}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="font-mono text-xs">{p.imei || "—"}</div>
+                        <div className="text-[11px] text-[var(--muted)]">{p.model || "—"}</div>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="font-semibold">{p.store_name || p.store_id || "—"}</div>
+                        <div className="text-[11px] text-[var(--muted)]">
+                          {p.store_info?.branch ? `${p.store_info.branch} · ` : ""}by {p.created_by}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-[11px] text-[var(--muted)] tabular-nums">
+                        <div>{(p.recorded_at || p.created_at || "").slice(0, 16).replace("T", " ")}</div>
+                        <div>{p.timezone || "UTC"}</div>
+                      </td>
                       <td className="px-3 py-2.5 font-bold tabular-nums">
                         {p.offer?.value ? `${MONEY[p.offer.currency ?? "INR"] ?? ""}${p.offer.value.toLocaleString(p.offer.currency === "INR" ? "en-IN" : "en-US")}` : "—"}
                         {p.offer?.grade ? <span className="ml-1 font-normal text-[var(--muted)]">({p.offer.grade})</span> : null}

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { withBase } from "@/lib/basePath";
 import ImeiScanner from "@/app/components/ImeiScanner";
+import SensorScanner from "@/app/components/SensorScanner";
 
 // Desk tester, INSIDE the console — starts a diagnostic session for the selected
 // client without bouncing to /enterprise and signing in again. The session is
@@ -95,6 +96,8 @@ export default function DeskPanel({ clientId }: { clientId: string }) {
           </div>
         )}
       </section>
+
+      <SensorScanner clientId={clientId} />
 
       <section className="card p-5">
         <h3 className="mb-2 text-[14px] font-bold">Two-device flow</h3>

@@ -88,6 +88,8 @@ export default function RetailDesk() {
   const [showNew, setShowNew] = useState(false);
   const [custName, setCustName] = useState("");
   const [custPhone, setCustPhone] = useState("");
+  const [custImei, setCustImei] = useState("");
+  const [storeBranch, setStoreBranch] = useState("Main Counter");
 
   // kyc form
   const [idType, setIdType] = useState("aadhaar");
@@ -183,14 +185,26 @@ export default function RetailDesk() {
     setActionErr("");
     setActionBusy(true);
     try {
+      const tz =
+        typeof Intl !== "undefined"
+          ? Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+          : "UTC";
       const r = await fetch(withBase("/api/retail/purchases"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: custName, phone: custPhone }),
+        body: JSON.stringify({
+          name: custName,
+          phone: custPhone,
+          imei: custImei.replace(/\D/g, "").slice(0, 15),
+          branch: storeBranch || "Main Counter",
+          storeName: client?.name || "Retail Desk",
+          timezone: tz,
+          recordedAt: new Date().toISOString(),
+        }),
       });
       const j = await r.json();
       if (!r.ok) { setActionErr(j.error || "Couldn't create the purchase."); return; }
-      setCustName(""); setCustPhone(""); setShowNew(false);
+      setCustName(""); setCustPhone(""); setCustImei(""); setShowNew(false);
       await loadPurchases();
       setOpenId(j.purchase.id);
     } finally {
@@ -294,11 +308,15 @@ export default function RetailDesk() {
               ＋ New purchase
             </button>
           ) : (
-            <form onSubmit={createPurchase} className="mt-5 flex max-w-lg flex-col gap-2 sm:flex-row">
+            <form onSubmit={createPurchase} className="mt-5 flex max-w-2xl flex-wrap gap-2">
               <input value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="Customer name"
-                className="flex-1 rounded-full px-5 py-3 font-semibold text-slate-900 outline-none" />
+                className="min-w-[160px] flex-1 rounded-full px-5 py-3 font-semibold text-slate-900 outline-none" />
               <input value={custPhone} onChange={(e) => setCustPhone(e.target.value)} placeholder="+91 mobile" inputMode="tel"
-                className="w-full rounded-full px-5 py-3 font-semibold text-slate-900 outline-none sm:w-44" />
+                className="w-full rounded-full px-5 py-3 font-semibold text-slate-900 outline-none sm:w-40" />
+              <input value={custImei} onChange={(e) => setCustImei(e.target.value.replace(/\D/g, "").slice(0, 15))} placeholder="IMEI (optional)" inputMode="numeric"
+                className="w-full rounded-full px-5 py-3 font-mono text-sm font-semibold text-slate-900 outline-none sm:w-44" />
+              <input value={storeBranch} onChange={(e) => setStoreBranch(e.target.value)} placeholder="Store branch"
+                className="w-full rounded-full px-5 py-3 text-sm font-semibold text-slate-900 outline-none sm:w-40" />
               <button type="submit" disabled={actionBusy}
                 className="rounded-full bg-slate-900 px-6 py-3 font-bold text-white disabled:opacity-40">Start →</button>
             </form>

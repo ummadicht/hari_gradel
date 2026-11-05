@@ -139,6 +139,76 @@ function init(): Database.Database {
       n       INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (budget, win, scope, k, outcome)
     );
+
+    -- HARDWARE & BROWSER SENSOR SCANS. Persists every sensor scan run (full or
+    -- single-sensor) with customer/device phone, IMEI, model, store metadata,
+    -- timestamp, and IANA timezone.
+    CREATE TABLE IF NOT EXISTS sensor_scans (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id      TEXT NOT NULL DEFAULT '',
+      client_id       TEXT NOT NULL DEFAULT 'default',
+      phone           TEXT NOT NULL DEFAULT '',
+      imei            TEXT NOT NULL DEFAULT '',
+      model           TEXT NOT NULL DEFAULT '',
+      store_id        TEXT NOT NULL DEFAULT '',
+      store_name      TEXT NOT NULL DEFAULT '',
+      store_info      TEXT NOT NULL DEFAULT '{}',
+      pass_count      INTEGER NOT NULL DEFAULT 0,
+      fail_count      INTEGER NOT NULL DEFAULT 0,
+      skip_count      INTEGER NOT NULL DEFAULT 0,
+      total_count     INTEGER NOT NULL DEFAULT 0,
+      duration_ms     INTEGER NOT NULL DEFAULT 0,
+      functional_map  TEXT NOT NULL DEFAULT '{}',
+      sensor_readings TEXT NOT NULL DEFAULT '[]',
+      device_info     TEXT NOT NULL DEFAULT '{}',
+      scanned_at      TEXT NOT NULL DEFAULT (datetime('now')),
+      timezone        TEXT NOT NULL DEFAULT 'UTC',
+      created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_sensor_scans_client ON sensor_scans(client_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_sensor_scans_session ON sensor_scans(session_id);
+    CREATE INDEX IF NOT EXISTS idx_sensor_scans_imei ON sensor_scans(imei);
+
+    -- STORES DIRECTORY. Persists retail / partner store information per client.
+    CREATE TABLE IF NOT EXISTS stores (
+      id          TEXT PRIMARY KEY,
+      client_id   TEXT NOT NULL DEFAULT 'default',
+      store_name  TEXT NOT NULL DEFAULT '',
+      branch      TEXT NOT NULL DEFAULT '',
+      phone       TEXT NOT NULL DEFAULT '',
+      address     TEXT NOT NULL DEFAULT '',
+      city        TEXT NOT NULL DEFAULT '',
+      timezone    TEXT NOT NULL DEFAULT 'UTC',
+      vpa         TEXT NOT NULL DEFAULT '',
+      operator    TEXT NOT NULL DEFAULT '',
+      store_info  TEXT NOT NULL DEFAULT '{}',
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_stores_client ON stores(client_id, updated_at);
+
+    -- DIAGNOSTIC SUMMARY REPORTS. Persists generated summary PDFs and diagnostic
+    -- outcome snapshots per client/store with phone, IMEI, datetime, and timezone.
+    CREATE TABLE IF NOT EXISTS diagnostic_reports (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id       TEXT NOT NULL DEFAULT 'default',
+      session_id      TEXT NOT NULL DEFAULT '',
+      phone           TEXT NOT NULL DEFAULT '',
+      imei            TEXT NOT NULL DEFAULT '',
+      store_id        TEXT NOT NULL DEFAULT '',
+      store_name      TEXT NOT NULL DEFAULT '',
+      store_info      TEXT NOT NULL DEFAULT '{}',
+      pass_count      INTEGER NOT NULL DEFAULT 0,
+      fail_count      INTEGER NOT NULL DEFAULT 0,
+      skip_count      INTEGER NOT NULL DEFAULT 0,
+      total_checks    INTEGER NOT NULL DEFAULT 0,
+      sessions_count  INTEGER NOT NULL DEFAULT 0,
+      report_payload  TEXT NOT NULL DEFAULT '{}',
+      generated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+      timezone        TEXT NOT NULL DEFAULT 'UTC',
+      created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_diag_reports_client ON diagnostic_reports(client_id, created_at);
   `);
 
   // grading_runs gained `model` after the first release. Its own doc comment
@@ -182,6 +252,13 @@ function init(): Database.Database {
        megabytes twice from a phone, under one unchanging "Checking the
        photos…". Holding them here makes the second call carry no images. */
     ["staged", "TEXT NOT NULL DEFAULT ''"],
+    ["phone", "TEXT NOT NULL DEFAULT ''"],
+    ["recorded_at", "TEXT NOT NULL DEFAULT ''"],
+    ["timezone", "TEXT NOT NULL DEFAULT 'UTC'"],
+    ["store_id", "TEXT NOT NULL DEFAULT ''"],
+    ["store_name", "TEXT NOT NULL DEFAULT ''"],
+    ["store_info", "TEXT NOT NULL DEFAULT '{}'"],
+    ["sensor_scan", "TEXT NOT NULL DEFAULT '{}'"],
   ] as const) {
     const has = (
       db.prepare("PRAGMA table_info(sessions)").all() as { name: string }[]
@@ -204,6 +281,7 @@ export const db = g.__gradeiq_db ?? (g.__gradeiq_db = init());
 export type SessionRow = {
   id: string;
   imei: string;
+  phone: string;
   model: string;
   status: string;
   functional: string;
@@ -227,6 +305,12 @@ export type SessionRow = {
   client_id: string;
   video: string;
   capture: string;
+  recorded_at: string;
+  timezone: string;
+  store_id: string;
+  store_name: string;
+  store_info: string;
+  sensor_scan: string;
   created_at: string;
   updated_at: string;
 };
@@ -248,6 +332,8 @@ export type Session = Omit<
   | "camera"
   | "ocr"
   | "capture"
+  | "store_info"
+  | "sensor_scan"
 > & {
   functional: Record<string, "pass" | "fail" | "skip">;
   cosmetic: Record<string, any>;
@@ -264,11 +350,18 @@ export type Session = Omit<
   camera: Record<string, any>;
   ocr: Record<string, any>;
   capture: Record<string, any>;
+  store_info: Record<string, any>;
+  sensor_scan: Record<string, any>;
 };
 
 export function hydrate(row: SessionRow): Session {
   return {
     ...row,
+    phone: row.phone ?? "",
+    recorded_at: row.recorded_at || row.created_at || "",
+    timezone: row.timezone || "UTC",
+    store_id: row.store_id ?? "",
+    store_name: row.store_name ?? "",
     functional: safeJson(row.functional, {}),
     cosmetic: safeJson(row.cosmetic, {}),
     photos: safeJson(row.photos, []),
@@ -284,6 +377,8 @@ export function hydrate(row: SessionRow): Session {
     camera: safeJson(row.camera ?? "{}", {}),
     ocr: safeJson(row.ocr ?? "{}", {}),
     capture: safeJson(row.capture ?? "{}", {}),
+    store_info: safeJson(row.store_info ?? "{}", {}),
+    sensor_scan: safeJson(row.sensor_scan ?? "{}", {}),
   };
 }
 

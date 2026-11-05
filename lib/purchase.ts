@@ -29,18 +29,26 @@ import { estimateValue } from "./valuation";
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS purchases (
-    id         TEXT PRIMARY KEY,
-    client_id  TEXT NOT NULL,
-    created_by TEXT NOT NULL DEFAULT '',
-    status     TEXT NOT NULL DEFAULT 'intake',
-    customer   TEXT NOT NULL DEFAULT '{}',
-    kyc        TEXT NOT NULL DEFAULT '{}',
-    session_id TEXT NOT NULL DEFAULT '',
-    offer      TEXT NOT NULL DEFAULT '{}',
-    clearance  TEXT NOT NULL DEFAULT '{}',
-    payout     TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    id          TEXT PRIMARY KEY,
+    client_id   TEXT NOT NULL,
+    created_by  TEXT NOT NULL DEFAULT '',
+    status      TEXT NOT NULL DEFAULT 'intake',
+    customer    TEXT NOT NULL DEFAULT '{}',
+    phone       TEXT NOT NULL DEFAULT '',
+    imei        TEXT NOT NULL DEFAULT '',
+    model       TEXT NOT NULL DEFAULT '',
+    kyc         TEXT NOT NULL DEFAULT '{}',
+    session_id  TEXT NOT NULL DEFAULT '',
+    offer       TEXT NOT NULL DEFAULT '{}',
+    clearance   TEXT NOT NULL DEFAULT '{}',
+    payout      TEXT NOT NULL DEFAULT '{}',
+    recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
+    timezone    TEXT NOT NULL DEFAULT 'UTC',
+    store_id    TEXT NOT NULL DEFAULT '',
+    store_name  TEXT NOT NULL DEFAULT '',
+    store_info  TEXT NOT NULL DEFAULT '{}',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
   );
   CREATE INDEX IF NOT EXISTS idx_purchases_client ON purchases(client_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_purchases_session ON purchases(session_id);
@@ -57,11 +65,48 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_ledger_client ON credit_ledger(client_id, id);
 `);
 
+for (const [col, def] of [
+  ["phone", "TEXT NOT NULL DEFAULT ''"],
+  ["imei", "TEXT NOT NULL DEFAULT ''"],
+  ["model", "TEXT NOT NULL DEFAULT ''"],
+  ["recorded_at", "TEXT NOT NULL DEFAULT ''"],
+  ["timezone", "TEXT NOT NULL DEFAULT 'UTC'"],
+  ["store_id", "TEXT NOT NULL DEFAULT ''"],
+  ["store_name", "TEXT NOT NULL DEFAULT ''"],
+  ["store_info", "TEXT NOT NULL DEFAULT '{}'"],
+] as const) {
+  const has = (
+    db.prepare("PRAGMA table_info(purchases)").all() as { name: string }[]
+  ).some((c) => c.name === col);
+  if (!has) {
+    try {
+      db.exec(`ALTER TABLE purchases ADD COLUMN ${col} ${def};`);
+    } catch {
+      /* concurrent init */
+    }
+  }
+}
+
 export type PurchaseStatus =
   | "intake" | "checking" | "offered" | "accepted" | "cleared" | "paying" | "paid"
   | "declined" | "cancelled";
 
 export type Customer = { name: string; phone: string };
+export type StoreMetadata = {
+  storeId?: string;
+  storeName?: string;
+  branch?: string;
+  storePhone?: string;
+  address?: string;
+  city?: string;
+  operator?: string;
+  vpa?: string;
+  currency?: string;
+  imei?: string;
+  model?: string;
+  recordedAt?: string;
+  timezone?: string;
+};
 export type Kyc = { idType: string; idLast4: string; idName: string; address?: string };
 export type Clearance = {
   fmip: "clear" | "locked" | "unknown";
@@ -89,11 +134,19 @@ export type Purchase = {
   created_by: string;
   status: PurchaseStatus;
   customer: Partial<Customer>;
+  phone: string;
+  imei: string;
+  model: string;
   kyc: Partial<Kyc>;
   session_id: string;
   offer: { value?: number; currency?: string; grade?: string; note?: string; at?: string };
   clearance: Partial<Clearance>;
   payout: Partial<Payout>;
+  recorded_at: string;
+  timezone: string;
+  store_id: string;
+  store_name: string;
+  store_info: Record<string, any>;
   created_at: string;
   updated_at: string;
 };
@@ -102,9 +155,18 @@ function hydrate(row: Record<string, unknown>): Purchase {
   const j = (v: unknown) => {
     try { return JSON.parse(String(v || "{}")); } catch { return {}; }
   };
+  const customer = j(row.customer) as Partial<Customer>;
   return {
     ...(row as object),
-    customer: j(row.customer),
+    customer,
+    phone: String(row.phone || customer?.phone || ""),
+    imei: String(row.imei || ""),
+    model: String(row.model || ""),
+    recorded_at: String(row.recorded_at || row.created_at || ""),
+    timezone: String(row.timezone || "UTC"),
+    store_id: String(row.store_id || ""),
+    store_name: String(row.store_name || ""),
+    store_info: j(row.store_info),
     kyc: j(row.kyc),
     offer: j(row.offer),
     clearance: j(row.clearance),
@@ -138,24 +200,102 @@ function touch(id: string, fields: Record<string, string>) {
   );
 }
 
-/** intake — name + mobile only. */
-export function createPurchase(clientId: string, createdBy: string, customer: Customer): Purchase {
+/** intake — name + mobile + optional IMEI, model, datetime, timezone, and store metadata. */
+export function createPurchase(
+  clientId: string,
+  createdBy: string,
+  customer: Customer,
+  meta?: StoreMetadata
+): Purchase {
   const name = String(customer.name || "").trim().slice(0, 80);
   const phone = String(customer.phone || "").replace(/[^\d+]/g, "").slice(0, 16);
   if (!name || phone.replace(/\D/g, "").length < 10) {
     throw new Error("Customer name and a valid 10-digit mobile number are required.");
   }
+  const clientDef = resolveClient(clientId);
+  const storeVpa = getSetting(`payout_vpa:${clientId}`) || "";
+  const imei = String(meta?.imei || "").replace(/\D/g, "").slice(0, 15);
+  const model = String(meta?.model || "").trim().slice(0, 80);
+  const timezone = String(meta?.timezone || "UTC").trim().slice(0, 64) || "UTC";
+  const recordedAt = String(meta?.recordedAt || new Date().toISOString()).slice(0, 40);
+  const storeId = String(meta?.storeId || `${clientId}-main`).trim().slice(0, 64);
+  const storeName = String(meta?.storeName || clientDef.name).trim().slice(0, 120);
+  const storeInfo = {
+    storeId,
+    storeName,
+    branch: String(meta?.branch || "Main Counter").slice(0, 80),
+    storePhone: String(meta?.storePhone || phone).slice(0, 24),
+    address: String(meta?.address || "").slice(0, 160),
+    city: String(meta?.city || "").slice(0, 64),
+    operator: createdBy,
+    vpa: storeVpa,
+    currency: clientDef.currency,
+    customerName: name,
+    customerPhone: phone,
+    imei,
+    model,
+    recordedAt,
+    timezone,
+  };
+
   const id = `p_${newToken()}`;
   db.prepare(
-    "INSERT INTO purchases (id, client_id, created_by, status, customer) VALUES (?, ?, ?, 'intake', ?)"
-  ).run(id, clientId, createdBy, JSON.stringify({ name, phone }));
+    `INSERT INTO purchases (
+       id, client_id, created_by, status, customer,
+       phone, imei, model, recorded_at, timezone, store_id, store_name, store_info
+     ) VALUES (?, ?, ?, 'intake', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    clientId,
+    createdBy,
+    JSON.stringify({ name, phone }),
+    phone,
+    imei,
+    model,
+    recordedAt,
+    timezone,
+    storeId,
+    storeName,
+    JSON.stringify(storeInfo)
+  );
+
+  try {
+    db.prepare(
+      `INSERT INTO stores (id, client_id, store_name, branch, phone, address, city, timezone, vpa, operator, store_info)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         store_name = excluded.store_name,
+         branch = excluded.branch,
+         phone = CASE WHEN excluded.phone <> '' THEN excluded.phone ELSE stores.phone END,
+         timezone = excluded.timezone,
+         vpa = excluded.vpa,
+         operator = excluded.operator,
+         store_info = excluded.store_info,
+         updated_at = datetime('now')`
+    ).run(
+      storeId,
+      clientId,
+      storeName,
+      storeInfo.branch,
+      storeInfo.storePhone,
+      storeInfo.address,
+      storeInfo.city,
+      timezone,
+      storeVpa,
+      createdBy,
+      JSON.stringify(storeInfo)
+    );
+  } catch {
+    /* non-blocking store directory sync */
+  }
+
   return getPurchase(id)!;
 }
 
 /**
  * Link the GradeIQ session created for this purchase (called from session POST,
- * which has ALREADY verified an authenticated portal user scoped to this
- * purchase's tenant). Immutable: a purchase links exactly one session, ever —
+ * which has ALREADY verified an authenticated portal user whose tenant owns the
+ * purchase). Immutable: a purchase links exactly one session, ever —
  * re-linking would let a second device swap in a different (better) phone after
  * the first was priced. The session's tenant must equal the purchase's tenant.
  */
@@ -164,7 +304,37 @@ export function linkSession(purchaseId: string, sessionId: string): void {
   if (!p || p.status !== "intake" || p.session_id) return;
   const s = getSession(sessionId);
   if (!s || String((s as { client_id?: string }).client_id || "") !== p.client_id) return;
-  touch(purchaseId, { session_id: sessionId, status: "checking" });
+  const imei = s.imei || p.imei || "";
+  const model = s.model || p.model || "";
+  touch(purchaseId, {
+    session_id: sessionId,
+    status: "checking",
+    ...(imei ? { imei } : {}),
+    ...(model ? { model } : {}),
+  });
+  try {
+    db.prepare(
+      `UPDATE sessions
+       SET phone = CASE WHEN phone = '' THEN ? ELSE phone END,
+           imei = CASE WHEN imei = '' THEN ? ELSE imei END,
+           timezone = CASE WHEN timezone = '' OR timezone = 'UTC' THEN ? ELSE timezone END,
+           store_id = CASE WHEN store_id = '' THEN ? ELSE store_id END,
+           store_name = CASE WHEN store_name = '' THEN ? ELSE store_name END,
+           store_info = CASE WHEN store_info = '{}' THEN ? ELSE store_info END,
+           updated_at = datetime('now')
+       WHERE id = ?`
+    ).run(
+      p.phone || p.customer?.phone || "",
+      imei,
+      p.timezone || "UTC",
+      p.store_id || "",
+      p.store_name || "",
+      JSON.stringify(p.store_info ?? {}),
+      sessionId
+    );
+  } catch {
+    /* non-blocking session enrichment */
+  }
 }
 
 /**
@@ -175,17 +345,38 @@ export function linkSession(purchaseId: string, sessionId: string): void {
  * for a phone nobody has inspected yet.
  */
 export function refreshOffer(p: Purchase): Purchase {
-  if (!p.session_id || p.status !== "checking") return p;
+  if (!p.session_id) return p;
   const s = getSession(p.session_id);
   if (!s) return p;
+  const syncFields: Record<string, string> = {};
+  if (s.imei && s.imei !== p.imei) syncFields.imei = s.imei;
+  if (s.model && s.model !== p.model) syncFields.model = s.model;
+  if (p.status !== "checking") {
+    if (Object.keys(syncFields).length > 0) {
+      touch(p.id, syncFields);
+      return getPurchase(p.id)!;
+    }
+    return p;
+  }
   const graded = !!(s.cosmetic_grade || s.overall_grade) || s.status === "graded";
-  if (!graded) return p;
+  if (!graded) {
+    if (Object.keys(syncFields).length > 0) {
+      touch(p.id, syncFields);
+      return getPurchase(p.id)!;
+    }
+    return p;
+  }
   const v = estimateValue(s);
   if (v.value > 0) {
     touch(p.id, {
+      ...syncFields,
       status: "offered",
       offer: JSON.stringify({ value: v.value, currency: v.currency, grade: v.grade, note: v.note, at: new Date().toISOString() }),
     });
+    return getPurchase(p.id)!;
+  }
+  if (Object.keys(syncFields).length > 0) {
+    touch(p.id, syncFields);
     return getPurchase(p.id)!;
   }
   return p;

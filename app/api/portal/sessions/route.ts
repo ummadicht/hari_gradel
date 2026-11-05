@@ -3,6 +3,13 @@ import { db } from "@/lib/db";
 import { describeSession } from "@/lib/sessionStage";
 import { portalUser, scopedClient } from "@/lib/portalAuth";
 import { isClientId } from "@/lib/clients";
+import { FUNCTIONAL_TESTS } from "@/lib/tests";
+import { SENSOR_CATALOG } from "@/lib/sensorScan";
+
+const TEST_LABELS: Record<string, string> = {
+  ...Object.fromEntries(FUNCTIONAL_TESTS.map((t) => [t.id, t.name])),
+  ...Object.fromEntries(SENSOR_CATALOG.map((s) => [s.id, s.name])),
+};
 
 // GET ?client=…&limit=… → that client's sessions for the monitor (scoped).
 // Super may pass client=all for the cross-tenant view.
@@ -26,9 +33,10 @@ export async function GET(req: NextRequest) {
 
   const rawRows = db
     .prepare(
-      `SELECT id, imei, model, status, client_id, cosmetic_grade, overall_grade,
+      `SELECT id, imei, phone, model, status, client_id, cosmetic_grade, overall_grade,
               cosmetic, capture, photos, device, functional, offer, accepted,
-              ocr, camera, profile, created_at, updated_at
+              ocr, camera, profile, recorded_at, timezone, store_id, store_name, store_info,
+              created_at, updated_at
        FROM sessions ${where} ORDER BY updated_at DESC LIMIT ?`,
     )
     .all(...args, limit) as Record<string, any>[];
@@ -65,6 +73,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  let totalPass = 0;
+  let totalFail = 0;
+  let totalSkip = 0;
+  let sessionsTested = 0;
+  const byTestMap = new Map<
+    string,
+    { id: string; name: string; pass: number; fail: number; skip: number; total: number }
+  >();
+
+  for (const t of FUNCTIONAL_TESTS) {
+    byTestMap.set(t.id, { id: t.id, name: t.name, pass: 0, fail: 0, skip: 0, total: 0 });
+  }
+
   const sessions = rawRows.map((r) => {
     const cosmeticObj = parse(r.cosmetic);
     const captureObj = parse(r.capture);
@@ -73,6 +94,40 @@ export async function GET(req: NextRequest) {
     const ocrObj = parse(r.ocr);
     const cameraObj = parse(r.camera);
     const profileObj = parse(r.profile);
+    const storeInfoObj = parse(r.store_info) ?? {};
+    const functionalObj = (parse(r.functional) ?? {}) as Record<string, unknown>;
+
+    let fnPass = 0;
+    let fnFail = 0;
+    let fnSkip = 0;
+    const entries = Object.entries(functionalObj);
+    for (const [k, v] of entries) {
+      if (v !== "pass" && v !== "fail" && v !== "skip") continue;
+      if (v === "pass") {
+        fnPass++;
+        totalPass++;
+      } else if (v === "fail") {
+        fnFail++;
+        totalFail++;
+      } else {
+        fnSkip++;
+        totalSkip++;
+      }
+      const existing = byTestMap.get(k) ?? {
+        id: k,
+        name: TEST_LABELS[k] || k,
+        pass: 0,
+        fail: 0,
+        skip: 0,
+        total: 0,
+      };
+      existing[v]++;
+      existing.total++;
+      byTestMap.set(k, existing);
+    }
+    if (fnPass + fnFail + fnSkip > 0) {
+      sessionsTested++;
+    }
 
     const tier = cosmeticObj?.tierUsed ?? null;
     const review =
@@ -96,7 +151,7 @@ export async function GET(req: NextRequest) {
       photoCount: photo_count,
       photoTarget: photo_target,
       captureVerdict: capture_verdict,
-      functional: parse(r.functional),
+      functional: functionalObj,
       cosmeticGrade: r.cosmetic_grade,
       review,
       offer: parse(r.offer),
@@ -110,7 +165,8 @@ export async function GET(req: NextRequest) {
 
     return {
       id: r.id,
-      imei: r.imei,
+      imei: r.imei || "",
+      phone: r.phone || deviceObj?.phone || storeInfoObj?.phone || "",
       model: r.model,
       status: r.status,
       client_id: r.client_id,
@@ -122,12 +178,29 @@ export async function GET(req: NextRequest) {
       photo_count,
       storage,
       color,
+      recorded_at: r.recorded_at || r.created_at,
+      timezone: r.timezone || storeInfoObj?.timezone || "UTC",
+      store_id: r.store_id || storeInfoObj?.storeId || "",
+      store_name: r.store_name || storeInfoObj?.storeName || "",
+      store_info: storeInfoObj,
       created_at: r.created_at,
       updated_at: r.updated_at,
       stage,
       tags,
+      functional_summary: { pass: fnPass, fail: fnFail, skip: fnSkip },
     };
   });
 
-  return NextResponse.json({ sessions });
+  const diagnostics = {
+    summary: {
+      pass: totalPass,
+      fail: totalFail,
+      skip: totalSkip,
+      total: totalPass + totalFail + totalSkip,
+      sessionsTested,
+    },
+    byTest: Array.from(byTestMap.values()),
+  };
+
+  return NextResponse.json({ sessions, diagnostics });
 }

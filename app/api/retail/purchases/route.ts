@@ -28,10 +28,26 @@ export async function POST(req: NextRequest) {
   if (!scope.ok) return NextResponse.json({ error: scope.error }, { status: scope.status });
 
   try {
-    const p = createPurchase(scope.clientId, user.username, {
-      name: String(body.name || ""),
-      phone: String(body.phone || ""),
-    });
+    const p = createPurchase(
+      scope.clientId,
+      user.username,
+      {
+        name: String(body.name || ""),
+        phone: String(body.phone || ""),
+      },
+      {
+        imei: String(body.imei || ""),
+        model: String(body.model || ""),
+        timezone: String(body.timezone || req.headers.get("x-vercel-ip-timezone") || "UTC"),
+        recordedAt: String(body.recordedAt || new Date().toISOString()),
+        storeId: String(body.storeId || ""),
+        storeName: String(body.storeName || ""),
+        branch: String(body.branch || ""),
+        storePhone: String(body.storePhone || ""),
+        address: String(body.address || ""),
+        city: String(body.city || ""),
+      }
+    );
     return NextResponse.json({ purchase: p });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "bad request" }, { status: 400 });

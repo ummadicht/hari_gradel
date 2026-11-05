@@ -1,6 +1,6 @@
 -- =============================================================================
 -- GradeIQ — PostgreSQL Schema (Migrated from SQLite `data/gradeiq.db`)
--- Total Tables: 15
+-- Total Tables: 18
 -- =============================================================================
 -- Notes on SQLite -> PostgreSQL compatibility:
 -- 1. `INTEGER PRIMARY KEY AUTOINCREMENT` -> `BIGSERIAL PRIMARY KEY`
@@ -10,6 +10,9 @@
 -- 3. JSON columns are kept as `TEXT` (with valid JSON defaults `'{}'` / `'[]'`)
 --    so `hydrate()` (`JSON.parse`) and `JSON.stringify` writes work without
 --    double-encoding issues, while still supporting `(col::jsonb)` in queries.
+-- 4. First-class columns for `phone`, `imei`, `recorded_at` (datetime),
+--    `timezone`, `store_id`, `store_name`, and `store_info` are stored across
+--    `sessions`, `purchases`, `sensor_scans`, `stores`, and `diagnostic_reports`.
 -- =============================================================================
 
 BEGIN;
@@ -18,6 +21,7 @@ BEGIN;
 CREATE TABLE IF NOT EXISTS sessions (
   id               TEXT PRIMARY KEY,
   imei             TEXT NOT NULL DEFAULT '',
+  phone            TEXT NOT NULL DEFAULT '',
   model            TEXT NOT NULL DEFAULT '',
   status           TEXT NOT NULL DEFAULT 'open',
   functional       TEXT NOT NULL DEFAULT '{}',
@@ -42,12 +46,29 @@ CREATE TABLE IF NOT EXISTS sessions (
   video            TEXT NOT NULL DEFAULT '',
   capture          TEXT NOT NULL DEFAULT '{}',
   staged           TEXT NOT NULL DEFAULT '',
+  recorded_at      TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
+  timezone         TEXT NOT NULL DEFAULT 'UTC',
+  store_id         TEXT NOT NULL DEFAULT '',
+  store_name       TEXT NOT NULL DEFAULT '',
+  store_info       TEXT NOT NULL DEFAULT '{}',
+  sensor_scan      TEXT NOT NULL DEFAULT '{}',
   created_at       TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
   updated_at       TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
 );
 
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS phone       TEXT NOT NULL DEFAULT '';
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS recorded_at TEXT NOT NULL DEFAULT '';
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS timezone    TEXT NOT NULL DEFAULT 'UTC';
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS store_id    TEXT NOT NULL DEFAULT '';
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS store_name  TEXT NOT NULL DEFAULT '';
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS store_info  TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS sensor_scan TEXT NOT NULL DEFAULT '{}';
+
 CREATE INDEX IF NOT EXISTS idx_sessions_client_created ON sessions(client_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sessions_created        ON sessions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sessions_imei           ON sessions(imei);
+CREATE INDEX IF NOT EXISTS idx_sessions_phone          ON sessions(phone);
+CREATE INDEX IF NOT EXISTS idx_sessions_store          ON sessions(store_id);
 
 -- 2. settings (lib/db.ts)
 CREATE TABLE IF NOT EXISTS settings (
@@ -66,7 +87,7 @@ CREATE TABLE IF NOT EXISTS session_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_session ON session_events(session_id, id);
-CREATE INDEX IF NOT EXISTS idx_events_at ON session_events(at);
+CREATE INDEX IF NOT EXISTS idx_events_at      ON session_events(at);
 
 -- 4. grading_runs (lib/db.ts)
 CREATE TABLE IF NOT EXISTS grading_runs (
@@ -104,7 +125,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_apikeys_hash ON api_keys(hash);
-CREATE INDEX IF NOT EXISTS idx_apikeys_client ON api_keys(client_id);
+CREATE INDEX IF NOT EXISTS idx_apikeys_client      ON api_keys(client_id);
 
 -- 6. imei_lookups (lib/db.ts & lib/imeiCache.ts)
 CREATE TABLE IF NOT EXISTS imei_lookups (
@@ -211,22 +232,42 @@ CREATE INDEX IF NOT EXISTS idx_captel_step    ON capture_telemetry(session_id, s
 
 -- 14. purchases (lib/purchase.ts)
 CREATE TABLE IF NOT EXISTS purchases (
-  id         TEXT PRIMARY KEY,
-  client_id  TEXT NOT NULL,
-  created_by TEXT NOT NULL DEFAULT '',
-  status     TEXT NOT NULL DEFAULT 'intake',
-  customer   TEXT NOT NULL DEFAULT '{}',
-  kyc        TEXT NOT NULL DEFAULT '{}',
-  session_id TEXT NOT NULL DEFAULT '',
-  offer      TEXT NOT NULL DEFAULT '{}',
-  clearance  TEXT NOT NULL DEFAULT '{}',
-  payout     TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
-  updated_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+  id          TEXT PRIMARY KEY,
+  client_id   TEXT NOT NULL,
+  created_by  TEXT NOT NULL DEFAULT '',
+  status      TEXT NOT NULL DEFAULT 'intake',
+  customer    TEXT NOT NULL DEFAULT '{}',
+  phone       TEXT NOT NULL DEFAULT '',
+  imei        TEXT NOT NULL DEFAULT '',
+  model       TEXT NOT NULL DEFAULT '',
+  kyc         TEXT NOT NULL DEFAULT '{}',
+  session_id  TEXT NOT NULL DEFAULT '',
+  offer       TEXT NOT NULL DEFAULT '{}',
+  clearance   TEXT NOT NULL DEFAULT '{}',
+  payout      TEXT NOT NULL DEFAULT '{}',
+  recorded_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
+  timezone    TEXT NOT NULL DEFAULT 'UTC',
+  store_id    TEXT NOT NULL DEFAULT '',
+  store_name  TEXT NOT NULL DEFAULT '',
+  store_info  TEXT NOT NULL DEFAULT '{}',
+  created_at  TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
+  updated_at  TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
 );
+
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS phone       TEXT NOT NULL DEFAULT '';
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS imei        TEXT NOT NULL DEFAULT '';
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS model       TEXT NOT NULL DEFAULT '';
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS recorded_at TEXT NOT NULL DEFAULT '';
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS timezone    TEXT NOT NULL DEFAULT 'UTC';
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS store_id    TEXT NOT NULL DEFAULT '';
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS store_name  TEXT NOT NULL DEFAULT '';
+ALTER TABLE purchases ADD COLUMN IF NOT EXISTS store_info  TEXT NOT NULL DEFAULT '{}';
 
 CREATE INDEX IF NOT EXISTS idx_purchases_client  ON purchases(client_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_purchases_session ON purchases(session_id);
+CREATE INDEX IF NOT EXISTS idx_purchases_phone   ON purchases(phone);
+CREATE INDEX IF NOT EXISTS idx_purchases_imei    ON purchases(imei);
+CREATE INDEX IF NOT EXISTS idx_purchases_store   ON purchases(store_id);
 
 -- 15. credit_ledger (lib/purchase.ts)
 CREATE TABLE IF NOT EXISTS credit_ledger (
@@ -240,5 +281,75 @@ CREATE TABLE IF NOT EXISTS credit_ledger (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ledger_client ON credit_ledger(client_id, id);
+
+-- 16. sensor_scans (lib/db.ts & app/api/sensor-scans/route.ts)
+CREATE TABLE IF NOT EXISTS sensor_scans (
+  id              BIGSERIAL PRIMARY KEY,
+  session_id      TEXT NOT NULL DEFAULT '',
+  client_id       TEXT NOT NULL DEFAULT 'default',
+  phone           TEXT NOT NULL DEFAULT '',
+  imei            TEXT NOT NULL DEFAULT '',
+  model           TEXT NOT NULL DEFAULT '',
+  store_id        TEXT NOT NULL DEFAULT '',
+  store_name      TEXT NOT NULL DEFAULT '',
+  store_info      TEXT NOT NULL DEFAULT '{}',
+  pass_count      INTEGER NOT NULL DEFAULT 0,
+  fail_count      INTEGER NOT NULL DEFAULT 0,
+  skip_count      INTEGER NOT NULL DEFAULT 0,
+  total_count     INTEGER NOT NULL DEFAULT 0,
+  duration_ms     INTEGER NOT NULL DEFAULT 0,
+  functional_map  TEXT NOT NULL DEFAULT '{}',
+  sensor_readings TEXT NOT NULL DEFAULT '[]',
+  device_info     TEXT NOT NULL DEFAULT '{}',
+  scanned_at      TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
+  timezone        TEXT NOT NULL DEFAULT 'UTC',
+  created_at      TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+);
+
+CREATE INDEX IF NOT EXISTS idx_sensor_scans_client  ON sensor_scans(client_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sensor_scans_session ON sensor_scans(session_id);
+CREATE INDEX IF NOT EXISTS idx_sensor_scans_imei    ON sensor_scans(imei);
+
+-- 17. stores (lib/db.ts & app/api/sensor-scans/route.ts)
+CREATE TABLE IF NOT EXISTS stores (
+  id          TEXT PRIMARY KEY,
+  client_id   TEXT NOT NULL DEFAULT 'default',
+  store_name  TEXT NOT NULL DEFAULT '',
+  branch      TEXT NOT NULL DEFAULT '',
+  phone       TEXT NOT NULL DEFAULT '',
+  address     TEXT NOT NULL DEFAULT '',
+  city        TEXT NOT NULL DEFAULT '',
+  timezone    TEXT NOT NULL DEFAULT 'UTC',
+  vpa         TEXT NOT NULL DEFAULT '',
+  operator    TEXT NOT NULL DEFAULT '',
+  store_info  TEXT NOT NULL DEFAULT '{}',
+  created_at  TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
+  updated_at  TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+);
+
+CREATE INDEX IF NOT EXISTS idx_stores_client ON stores(client_id, updated_at DESC);
+
+-- 18. diagnostic_reports (lib/db.ts & app/api/sensor-scans/route.ts)
+CREATE TABLE IF NOT EXISTS diagnostic_reports (
+  id              BIGSERIAL PRIMARY KEY,
+  client_id       TEXT NOT NULL DEFAULT 'default',
+  session_id      TEXT NOT NULL DEFAULT '',
+  phone           TEXT NOT NULL DEFAULT '',
+  imei            TEXT NOT NULL DEFAULT '',
+  store_id        TEXT NOT NULL DEFAULT '',
+  store_name      TEXT NOT NULL DEFAULT '',
+  store_info      TEXT NOT NULL DEFAULT '{}',
+  pass_count      INTEGER NOT NULL DEFAULT 0,
+  fail_count      INTEGER NOT NULL DEFAULT 0,
+  skip_count      INTEGER NOT NULL DEFAULT 0,
+  total_checks    INTEGER NOT NULL DEFAULT 0,
+  sessions_count  INTEGER NOT NULL DEFAULT 0,
+  report_payload  TEXT NOT NULL DEFAULT '{}',
+  generated_at    TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS'),
+  timezone        TEXT NOT NULL DEFAULT 'UTC',
+  created_at      TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')
+);
+
+CREATE INDEX IF NOT EXISTS idx_diag_reports_client ON diagnostic_reports(client_id, created_at DESC);
 
 COMMIT;
