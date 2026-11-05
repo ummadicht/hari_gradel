@@ -1,0 +1,37 @@
+{
+  "name": "gradeiq",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build --webpack",
+    "start": "next start -p 3700",
+    "lint": "eslint",
+    "check:authz": "node scripts/check-authz.mjs",
+    "test": "node scripts/run-tests.mjs",
+    "test:capture": "node scripts/run-tests.mjs lib/capture lib/sessionStage.test.mjs lib/compliance.test.mjs lib/phonecheck.test.mjs lib/lensVerify.test.mjs lib/findingScope.test.mjs lib/deviceMatch.test.mjs lib/identityGuard.test.mjs"
+  },
+  "dependencies": {
+    "@zxing/browser": "^0.2.0",
+    "@zxing/library": "^0.22.0",
+    "better-sqlite3": "^12.11.1",
+    "jose": "^5.10.0",
+    "next": "16.2.9",
+    "qrcode": "^1.5.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^20",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.9",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

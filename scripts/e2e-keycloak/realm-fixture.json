@@ -1,0 +1,137 @@
+{
+  "_comment": "Client projection of ~/projects/keycloak-novetta/realm-novetta.json for the mock IdP: NO secrets, NO users. Regenerate with the jq in scripts/e2e-keycloak/run.sh (realm_projection) when the realm changes; run.sh warns on drift.",
+  "realm": "novetta",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "revokeRefreshToken": true,
+  "clients": [
+    {
+      "clientId": "superiq-erp",
+      "publicClient": false,
+      "bearerOnly": null,
+      "standardFlowEnabled": true,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "https://wholecellmarket.com/auth/callback",
+        "http://localhost:3000/auth/callback"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://wholecellmarket.com/*##http://localhost:3000/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "erp_tenant",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "erp_tenant",
+            "claim.name": "erp_tenant",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "gradeiq",
+      "publicClient": false,
+      "bearerOnly": null,
+      "standardFlowEnabled": true,
+      "serviceAccountsEnabled": false,
+      "fullScopeAllowed": true,
+      "redirectUris": [
+        "https://swapmore.com/apps/gradeiq/auth/callback",
+        "http://localhost:3700/auth/callback"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://swapmore.com/apps/gradeiq/*##http://localhost:3700/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "giq_client",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "giq_client",
+            "claim.name": "giq_client",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "gradeiq-svc",
+      "publicClient": false,
+      "bearerOnly": null,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": false,
+      "redirectUris": null,
+      "attributes": {},
+      "protocolMappers": [
+        {
+          "name": "aud-superiq-erp",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "superiq-erp",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "pandas-api",
+      "publicClient": false,
+      "bearerOnly": null,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": false,
+      "redirectUris": null,
+      "attributes": {},
+      "protocolMappers": [
+        {
+          "name": "aud-gradeiq",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "gradeiq",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "swapmore-svc",
+      "publicClient": false,
+      "bearerOnly": null,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": false,
+      "redirectUris": null,
+      "attributes": {},
+      "protocolMappers": [
+        {
+          "name": "aud-gradeiq",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "gradeiq",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ]
+}

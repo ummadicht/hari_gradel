@@ -1,0 +1,117 @@
+{
+  "$comment": "Who may call every app/api/**/route.ts handler. Checked by scripts/check-authz.mjs (npm run check:authz): a route or method missing here fails, an entry for a route that no longer exists fails, and a method declared staff / service / server-key whose handler has no matching check fails. A method is a class string, or { class, note } when it needs a word of explanation. `risk` marks a known gap that is printed as a warning on every run until it is closed.",
+  "classes": {
+    "anonymous": "anyone on the internet — no key, no session id",
+    "session": "anyone holding the session id (the UUID in the seller's QR / SwapUp's camera link / CounterIQ's link); writes are judged by lib/sessionWriteRules.ts where it matters",
+    "staff": "a portal / Keycloak sign-in (portalUser / isEntAuthed / staffFor), tenant-scoped where the route says so",
+    "service": "a Keycloak client_credentials token (requireServiceToken) when KEYCLOAK_ISSUER is set; without it the route's shared secret or 503 (lib/m2m.ts)",
+    "server-key": "SwapUp's server via x-gradeiq-server-key (hasServerKey / paidCaller), or staff"
+  },
+  "routes": {
+    "app/api/clients/[clientId]/pricebook/route.ts": {
+      "POST": { "class": "service", "note": "swapmore-svc token, or without Keycloak x-sync-secret = PRICEBOOK_SYNC_SECRET (constant time)" },
+      "GET": { "class": "anonymous", "note": "pricing is not secret; read by the console" }
+    },
+    "app/api/configurator/route.ts": {
+      "GET": { "class": "staff", "note": "super admin only: the GLOBAL program config. Only the /configurator page reads it; the flows read it server-side (getProgramConfig)" },
+      "POST": { "class": "staff", "note": "super admin only (SUP-88): rewrites the GLOBAL program config (segments, pricing overrides). /configurator is behind the staff middleware" }
+    },
+    "app/api/customers/auth/token/route.ts": {
+      "POST": { "class": "anonymous", "note": "retired — always answers 410" }
+    },
+    "app/api/customers/sessions/[id]/photos/[pid]/route.ts": { "GET": "service" },
+    "app/api/customers/sessions/[id]/route.ts": { "GET": "service" },
+    "app/api/enterprise/login/route.ts": { "POST": { "class": "anonymous", "note": "the legacy sign-in itself" } },
+    "app/api/enterprise/logout/route.ts": { "POST": { "class": "anonymous", "note": "clears cookies only" } },
+    "app/api/imei/[imei]/route.ts": { "GET": { "class": "server-key", "note": "paid Phonecheck lookup — server key or staff, never a seller" } },
+    "app/api/imei/ocr/route.ts": {
+      "POST": {
+        "class": "anonymous",
+        "note": "paidCaller({ seller: true }): server key, staff, or a same-origin browser (GradeIQ's own pages) — one Gemini call per request"
+      }
+    },
+    "app/api/journey/[clientId]/[channel]/route.ts": { "GET": { "class": "anonymous", "note": "journey copy and step toggles" } },
+    "app/api/journeys/[journey]/s/[id]/route.ts": { "GET": "session" },
+    "app/api/journeys/[journey]/start/route.ts": {
+      "POST": {
+        "class": "anonymous",
+        "note": "employee-mode journeys require staff inside the handler; one cached IMEI lookup under lib/lookupBudget.ts"
+      }
+    },
+    "app/api/portal/audit/route.ts": { "GET": "staff" },
+    "app/api/portal/catalog/route.ts": { "GET": "staff", "POST": "staff", "DELETE": "staff" },
+    "app/api/portal/compliance/route.ts": { "GET": "staff" },
+    "app/api/portal/config/route.ts": { "GET": "staff", "POST": "staff" },
+    "app/api/portal/login/route.ts": { "POST": { "class": "anonymous", "note": "the legacy sign-in itself (404 in oidc mode)" } },
+    "app/api/portal/logout/route.ts": { "POST": { "class": "anonymous", "note": "signs out whatever this browser holds" } },
+    "app/api/portal/me/route.ts": { "GET": "staff" },
+    "app/api/portal/phonecheck-probe/route.ts": { "GET": "staff" },
+    "app/api/portal/reset/route.ts": { "POST": "staff" },
+    "app/api/portal/sessions/[id]/route.ts": { "GET": "staff" },
+    "app/api/portal/sessions/route.ts": { "GET": "staff" },
+    "app/api/portal/users/route.ts": { "GET": "staff", "POST": "staff" },
+    "app/api/report/[id]/export/route.ts": { "GET": { "class": "session", "note": "the DeviceFax JSON SwapUp snapshots (call 6)" } },
+    "app/api/report/[id]/push-superiq/route.ts": { "POST": "staff" },
+    "app/api/retail/overview/route.ts": { "GET": "staff", "POST": "staff" },
+    "app/api/retail/purchases/[id]/route.ts": { "GET": "staff", "POST": "staff" },
+    "app/api/retail/purchases/route.ts": { "GET": "staff", "POST": "staff" },
+    "app/api/sessions/[id]/accept/route.ts": {
+      "POST": {
+        "class": "session",
+        "note": "the pass/fail comes from server-side diagnostics, not the caller; a paid IMEI lookup only under lib/lookupBudget.ts"
+      }
+    },
+    "app/api/sessions/[id]/attest/route.ts": { "POST": "session" },
+    "app/api/sessions/[id]/camera-assess/route.ts": {
+      "POST": { "class": "session", "note": "returns the stored assessment unless ?force=1" }
+    },
+    "app/api/sessions/[id]/camera-frames/route.ts": { "POST": "session" },
+    "app/api/sessions/[id]/capture-telemetry/route.ts": { "POST": { "class": "session", "note": "bounded per session and per step; cannot move a grade" } },
+    "app/api/sessions/[id]/cosmetic/route.ts": { "POST": { "class": "session", "note": "the capture gate runs first; a resubmission re-grades from new photos" } },
+    "app/api/sessions/[id]/device/route.ts": { "POST": { "class": "session", "note": "fills an EMPTY IMEI only" } },
+    "app/api/sessions/[id]/display/route.ts": { "POST": { "class": "session", "note": "the AI's verdict on the lit-screen captures" } },
+    "app/api/sessions/[id]/event/route.ts": { "POST": { "class": "session", "note": "known steps only, payload capped" } },
+    "app/api/sessions/[id]/functional/route.ts": {
+      "POST": {
+        "class": "session",
+        "note": "SUP-66: monotonic without staff — per result: a recorded fail, a lens staff or the photo check decided, a pending lens the browser cannot test, a dropped lens are KEPT and the rest saves (200 + refused[], logged); nothing changes once final (409); staff or SwapUp's server key may override, logged"
+      }
+    },
+    "app/api/sessions/[id]/grade-manual/route.ts": {
+      "POST": {
+        "class": "session",
+        "note": "SUP-66: without staff the pick is PROVISIONAL (priced at the lowest grade until confirmed) and refused (409) over an AI or staff grade or once final; staff may override, logged"
+      }
+    },
+    "app/api/sessions/[id]/lens-verify/route.ts": { "POST": { "class": "session", "note": "a photo verdict never improves a measured lens (lib/lensVerify.ts)" } },
+    "app/api/sessions/[id]/ocr/route.ts": {
+      "POST": { "class": "session", "note": "a paid IMEI lookup only under lib/lookupBudget.ts (session's own channel, per-IP daily limit)" }
+    },
+    "app/api/sessions/[id]/offer/route.ts": {
+      "POST": { "class": "session", "note": "recomputes from stored evidence; a paid IMEI lookup only under lib/lookupBudget.ts" }
+    },
+    "app/api/sessions/[id]/parts/route.ts": { "POST": "session" },
+    "app/api/sessions/[id]/passport/route.ts": { "GET": "session" },
+    "app/api/sessions/[id]/reprocess/route.ts": { "POST": "staff" },
+    "app/api/sessions/[id]/route.ts": {
+      "GET": { "class": "session", "note": "CounterIQ and SwapUp read the grade, identity and trust here — contracts/grade-result.ts" }
+    },
+    "app/api/sessions/[id]/runs/route.ts": { "GET": "staff" },
+    "app/api/sessions/[id]/screen/route.ts": {
+      "GET": "session",
+      "POST": { "class": "session", "note": "may clear cosmeticDone, never set it" }
+    },
+    "app/api/sessions/[id]/trust/route.ts": { "GET": "session" },
+    "app/api/sessions/[id]/value/route.ts": { "GET": { "class": "session", "note": "no value on the retail channel" } },
+    "app/api/sessions/[id]/video/route.ts": { "POST": "session" },
+    "app/api/sessions/route.ts": {
+      "POST": {
+        "class": "anonymous",
+        "note": "creates a session; the paid IMEI lookup only for the server key, CounterIQ's retail key, staff, or a known channel within its per-IP and all-IP daily limits (lib/lookupBudget.ts); linking a retail purchase needs staff of that tenant"
+      },
+      "GET": "staff"
+    },
+    "app/api/settings/route.ts": { "GET": "staff", "POST": "staff" },
+    "app/api/uploads/[file]/route.ts": { "GET": { "class": "anonymous", "note": "random file names are the capability" } }
+  }
+}

@@ -1,0 +1,522 @@
+{
+  "currency": "USD",
+  "schema": 1,
+  "constants": {
+    "marginRate": 0.12,
+    "processingCost": 16,
+    "scrapFloorRate": 0.08,
+    "carrierLockPenalty": 0.15
+  },
+  "storageMultipliers": {
+    "64GB": 0.85,
+    "128GB": 1,
+    "256GB": 1.12,
+    "512GB": 1.25,
+    "1TB": 1.4
+  },
+  "defaultStorage": "128GB",
+  "reconCosts": {
+    "flawless": 0,
+    "good": 9,
+    "fair": 22,
+    "rough": 45
+  },
+  "repairCosts": {
+    "lcd-damage": {
+      "part": 55,
+      "labor": 25
+    },
+    "water-damage": {
+      "part": 20,
+      "labor": 45
+    },
+    "no-power": {
+      "part": 15,
+      "labor": 70
+    },
+    "camera-issue": {
+      "part": 30,
+      "labor": 15
+    },
+    "battery-weak": {
+      "part": 14,
+      "labor": 12
+    },
+    "speaker-mic": {
+      "part": 10,
+      "labor": 14
+    },
+    "charging-port": {
+      "part": 12,
+      "labor": 20
+    },
+    "face-id": {
+      "part": 35,
+      "labor": 28
+    },
+    "buttons-broken": {
+      "part": 8,
+      "labor": 12
+    }
+  },
+  "cosmeticGrades": [
+    {
+      "id": "flawless",
+      "label": "Flawless"
+    },
+    {
+      "id": "good",
+      "label": "Light Wear"
+    },
+    {
+      "id": "fair",
+      "label": "Visible Wear"
+    },
+    {
+      "id": "rough",
+      "label": "Beat Up"
+    }
+  ],
+  "functionalIssues": [
+    {
+      "id": "lcd-damage",
+      "label": "LCD / Screen Damage"
+    },
+    {
+      "id": "water-damage",
+      "label": "Water Damage"
+    },
+    {
+      "id": "no-power",
+      "label": "Won't Turn On / Dead"
+    },
+    {
+      "id": "camera-issue",
+      "label": "Camera Not Working"
+    },
+    {
+      "id": "battery-weak",
+      "label": "Bad Battery"
+    },
+    {
+      "id": "speaker-mic",
+      "label": "Speaker / Mic Issue"
+    },
+    {
+      "id": "charging-port",
+      "label": "Charging Port"
+    },
+    {
+      "id": "face-id",
+      "label": "Face ID / Touch ID"
+    },
+    {
+      "id": "buttons-broken",
+      "label": "Buttons Not Working"
+    }
+  ],
+  "models": [
+    {
+      "id": "iphone-16-pro-max",
+      "brand": "Apple",
+      "name": "iPhone 16 Pro Max",
+      "basePrice": 650
+    },
+    {
+      "id": "iphone-16-pro",
+      "brand": "Apple",
+      "name": "iPhone 16 Pro",
+      "basePrice": 560
+    },
+    {
+      "id": "iphone-16-plus",
+      "brand": "Apple",
+      "name": "iPhone 16 Plus",
+      "basePrice": 470
+    },
+    {
+      "id": "iphone-16",
+      "brand": "Apple",
+      "name": "iPhone 16",
+      "basePrice": 430
+    },
+    {
+      "id": "iphone-16e",
+      "brand": "Apple",
+      "name": "iPhone 16e",
+      "basePrice": 380
+    },
+    {
+      "id": "iphone-15-pro-max",
+      "brand": "Apple",
+      "name": "iPhone 15 Pro Max",
+      "basePrice": 560
+    },
+    {
+      "id": "iphone-15-pro",
+      "brand": "Apple",
+      "name": "iPhone 15 Pro",
+      "basePrice": 460
+    },
+    {
+      "id": "iphone-15-plus",
+      "brand": "Apple",
+      "name": "iPhone 15 Plus",
+      "basePrice": 400
+    },
+    {
+      "id": "iphone-15",
+      "brand": "Apple",
+      "name": "iPhone 15",
+      "basePrice": 360
+    },
+    {
+      "id": "iphone-14-pro-max",
+      "brand": "Apple",
+      "name": "iPhone 14 Pro Max",
+      "basePrice": 440
+    },
+    {
+      "id": "iphone-14-pro",
+      "brand": "Apple",
+      "name": "iPhone 14 Pro",
+      "basePrice": 370
+    },
+    {
+      "id": "iphone-14-plus",
+      "brand": "Apple",
+      "name": "iPhone 14 Plus",
+      "basePrice": 320
+    },
+    {
+      "id": "iphone-14",
+      "brand": "Apple",
+      "name": "iPhone 14",
+      "basePrice": 280
+    },
+    {
+      "id": "iphone-13-pro-max",
+      "brand": "Apple",
+      "name": "iPhone 13 Pro Max",
+      "basePrice": 350
+    },
+    {
+      "id": "iphone-13-pro",
+      "brand": "Apple",
+      "name": "iPhone 13 Pro",
+      "basePrice": 300
+    },
+    {
+      "id": "iphone-13",
+      "brand": "Apple",
+      "name": "iPhone 13",
+      "basePrice": 240
+    },
+    {
+      "id": "iphone-13-mini",
+      "brand": "Apple",
+      "name": "iPhone 13 mini",
+      "basePrice": 200
+    },
+    {
+      "id": "iphone-12-pro-max",
+      "brand": "Apple",
+      "name": "iPhone 12 Pro Max",
+      "basePrice": 250
+    },
+    {
+      "id": "iphone-12-pro",
+      "brand": "Apple",
+      "name": "iPhone 12 Pro",
+      "basePrice": 210
+    },
+    {
+      "id": "iphone-12",
+      "brand": "Apple",
+      "name": "iPhone 12",
+      "basePrice": 160
+    },
+    {
+      "id": "iphone-12-mini",
+      "brand": "Apple",
+      "name": "iPhone 12 mini",
+      "basePrice": 120
+    },
+    {
+      "id": "iphone-11-pro-max",
+      "brand": "Apple",
+      "name": "iPhone 11 Pro Max",
+      "basePrice": 180
+    },
+    {
+      "id": "iphone-11-pro",
+      "brand": "Apple",
+      "name": "iPhone 11 Pro",
+      "basePrice": 150
+    },
+    {
+      "id": "iphone-11",
+      "brand": "Apple",
+      "name": "iPhone 11",
+      "basePrice": 120
+    },
+    {
+      "id": "iphone-xs-max",
+      "brand": "Apple",
+      "name": "iPhone XS Max",
+      "basePrice": 110
+    },
+    {
+      "id": "iphone-xr",
+      "brand": "Apple",
+      "name": "iPhone XR",
+      "basePrice": 90
+    },
+    {
+      "id": "iphone-se-3",
+      "brand": "Apple",
+      "name": "iPhone SE (3rd gen)",
+      "basePrice": 110
+    },
+    {
+      "id": "iphone-se-2",
+      "brand": "Apple",
+      "name": "iPhone SE (2nd gen)",
+      "basePrice": 60
+    },
+    {
+      "id": "galaxy-s25-ultra",
+      "brand": "Samsung",
+      "name": "Galaxy S25 Ultra",
+      "basePrice": 620
+    },
+    {
+      "id": "galaxy-s25-plus",
+      "brand": "Samsung",
+      "name": "Galaxy S25+",
+      "basePrice": 460
+    },
+    {
+      "id": "galaxy-s25",
+      "brand": "Samsung",
+      "name": "Galaxy S25",
+      "basePrice": 370
+    },
+    {
+      "id": "galaxy-s24-ultra",
+      "brand": "Samsung",
+      "name": "Galaxy S24 Ultra",
+      "basePrice": 490
+    },
+    {
+      "id": "galaxy-s24-plus",
+      "brand": "Samsung",
+      "name": "Galaxy S24+",
+      "basePrice": 370
+    },
+    {
+      "id": "galaxy-s24",
+      "brand": "Samsung",
+      "name": "Galaxy S24",
+      "basePrice": 290
+    },
+    {
+      "id": "galaxy-s24-fe",
+      "brand": "Samsung",
+      "name": "Galaxy S24 FE",
+      "basePrice": 250
+    },
+    {
+      "id": "galaxy-s23-ultra",
+      "brand": "Samsung",
+      "name": "Galaxy S23 Ultra",
+      "basePrice": 360
+    },
+    {
+      "id": "galaxy-s23-plus",
+      "brand": "Samsung",
+      "name": "Galaxy S23+",
+      "basePrice": 270
+    },
+    {
+      "id": "galaxy-s23",
+      "brand": "Samsung",
+      "name": "Galaxy S23",
+      "basePrice": 210
+    },
+    {
+      "id": "galaxy-s22-ultra",
+      "brand": "Samsung",
+      "name": "Galaxy S22 Ultra",
+      "basePrice": 240
+    },
+    {
+      "id": "galaxy-s22-plus",
+      "brand": "Samsung",
+      "name": "Galaxy S22+",
+      "basePrice": 170
+    },
+    {
+      "id": "galaxy-s22",
+      "brand": "Samsung",
+      "name": "Galaxy S22",
+      "basePrice": 140
+    },
+    {
+      "id": "galaxy-s21-ultra",
+      "brand": "Samsung",
+      "name": "Galaxy S21 Ultra",
+      "basePrice": 190
+    },
+    {
+      "id": "galaxy-s21-plus",
+      "brand": "Samsung",
+      "name": "Galaxy S21+",
+      "basePrice": 130
+    },
+    {
+      "id": "galaxy-s21",
+      "brand": "Samsung",
+      "name": "Galaxy S21",
+      "basePrice": 100
+    },
+    {
+      "id": "galaxy-z-fold-6",
+      "brand": "Samsung",
+      "name": "Galaxy Z Fold 6",
+      "basePrice": 640
+    },
+    {
+      "id": "galaxy-z-flip-6",
+      "brand": "Samsung",
+      "name": "Galaxy Z Flip 6",
+      "basePrice": 400
+    },
+    {
+      "id": "galaxy-z-fold-5",
+      "brand": "Samsung",
+      "name": "Galaxy Z Fold 5",
+      "basePrice": 450
+    },
+    {
+      "id": "galaxy-z-flip-5",
+      "brand": "Samsung",
+      "name": "Galaxy Z Flip 5",
+      "basePrice": 260
+    },
+    {
+      "id": "galaxy-z-fold-4",
+      "brand": "Samsung",
+      "name": "Galaxy Z Fold 4",
+      "basePrice": 330
+    },
+    {
+      "id": "galaxy-z-flip-4",
+      "brand": "Samsung",
+      "name": "Galaxy Z Flip 4",
+      "basePrice": 180
+    },
+    {
+      "id": "galaxy-note-20-ultra",
+      "brand": "Samsung",
+      "name": "Galaxy Note 20 Ultra",
+      "basePrice": 190
+    },
+    {
+      "id": "galaxy-a54",
+      "brand": "Samsung",
+      "name": "Galaxy A54",
+      "basePrice": 120
+    },
+    {
+      "id": "galaxy-a15",
+      "brand": "Samsung",
+      "name": "Galaxy A15",
+      "basePrice": 80
+    },
+    {
+      "id": "pixel-9-pro-xl",
+      "brand": "Google",
+      "name": "Pixel 9 Pro XL",
+      "basePrice": 470
+    },
+    {
+      "id": "pixel-9-pro",
+      "brand": "Google",
+      "name": "Pixel 9 Pro",
+      "basePrice": 400
+    },
+    {
+      "id": "pixel-9",
+      "brand": "Google",
+      "name": "Pixel 9",
+      "basePrice": 300
+    },
+    {
+      "id": "pixel-9a",
+      "brand": "Google",
+      "name": "Pixel 9a",
+      "basePrice": 300
+    },
+    {
+      "id": "pixel-8-pro",
+      "brand": "Google",
+      "name": "Pixel 8 Pro",
+      "basePrice": 300
+    },
+    {
+      "id": "pixel-8",
+      "brand": "Google",
+      "name": "Pixel 8",
+      "basePrice": 200
+    },
+    {
+      "id": "pixel-8a",
+      "brand": "Google",
+      "name": "Pixel 8a",
+      "basePrice": 220
+    },
+    {
+      "id": "pixel-7-pro",
+      "brand": "Google",
+      "name": "Pixel 7 Pro",
+      "basePrice": 190
+    },
+    {
+      "id": "pixel-7",
+      "brand": "Google",
+      "name": "Pixel 7",
+      "basePrice": 130
+    },
+    {
+      "id": "pixel-7a",
+      "brand": "Google",
+      "name": "Pixel 7a",
+      "basePrice": 150
+    },
+    {
+      "id": "pixel-6-pro",
+      "brand": "Google",
+      "name": "Pixel 6 Pro",
+      "basePrice": 140
+    },
+    {
+      "id": "pixel-6",
+      "brand": "Google",
+      "name": "Pixel 6",
+      "basePrice": 100
+    },
+    {
+      "id": "pixel-6a",
+      "brand": "Google",
+      "name": "Pixel 6a",
+      "basePrice": 90
+    },
+    {
+      "id": "pixel-fold",
+      "brand": "Google",
+      "name": "Pixel Fold",
+      "basePrice": 320
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "commit": "b55afee95bb1b0f35390bf4ea3e0d95e3db8b9e1",
+  "build_id": "zFbW0EuP63McZ9exHjP9E",
+  "host": "ammar@104.197.168.25",
+  "app_dir": "gradeiq",
+  "released_at": "2026-10-30T03:19:32Z",
+  "release": "20261030T031723Z-b55afee",
+  "note": "Written by deploy/release.sh or deploy/rollback.sh: the commit and BUILD_ID the VM serves. release.sh refuses to run unless the VM still matches this."
+}
