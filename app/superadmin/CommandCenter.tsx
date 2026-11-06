@@ -440,7 +440,7 @@ export default function CommandCenter({
                       fontSize: 12,
                     }}
                   />
-                  <Bar dataKey="count" name="Diagnostic Checks" radius={[8, 8, 0, 0]} maxBarSize={72}>
+                  <Bar dataKey="count" name="Diagnostic Checks" radius={[8, 8, 0, 0]} maxBarSize={72} isAnimationActive={false}>
                     {view.distributionData.map((entry) => (
                       <Cell key={entry.name} fill={entry.fill} />
                     ))}
@@ -462,6 +462,7 @@ export default function CommandCenter({
                       innerRadius={58}
                       outerRadius={92}
                       paddingAngle={3}
+                      isAnimationActive={false}
                     >
                       {view.distributionData.map((entry) => (
                         <Cell key={entry.name} fill={entry.fill} />
@@ -516,9 +517,9 @@ export default function CommandCenter({
                   }}
                 />
                 <Legend verticalAlign="top" height={32} />
-                <Bar dataKey="pass" name="Pass" stackId="a" fill={OUTCOME_COLORS.pass} radius={[0, 0, 0, 0]} />
-                <Bar dataKey="fail" name="Fail" stackId="a" fill={OUTCOME_COLORS.fail} radius={[0, 0, 0, 0]} />
-                <Bar dataKey="skip" name="Skip" stackId="a" fill={OUTCOME_COLORS.skip} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="pass" name="Pass" stackId="a" fill={OUTCOME_COLORS.pass} radius={[0, 0, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="fail" name="Fail" stackId="a" fill={OUTCOME_COLORS.fail} radius={[0, 0, 0, 0]} isAnimationActive={false} />
+                <Bar dataKey="skip" name="Skip" stackId="a" fill={OUTCOME_COLORS.skip} radius={[6, 6, 0, 0]} isAnimationActive={false} />
               </BarChart>
             </ResponsiveContainer>
           </div>
