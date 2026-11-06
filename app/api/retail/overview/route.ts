@@ -13,19 +13,27 @@ import { razorpayConfigured } from "@/lib/razorpay";
 export async function GET(req: NextRequest) {
   const user = await portalUser();
   if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
-  const scope = scopedClient(user, req.nextUrl.searchParams.get("client"), isClientId);
-  if (!scope.ok) return NextResponse.json({ error: scope.error }, { status: scope.status });
-  const clientId = scope.clientId;
+
+  const requested = req.nextUrl.searchParams.get("client");
+  let clientId = "";
+  if (user.role === "super" && requested === "all") {
+    clientId = "all";
+  } else {
+    const scope = scopedClient(user, requested, isClientId);
+    if (!scope.ok) return NextResponse.json({ error: scope.error }, { status: scope.status });
+    clientId = scope.clientId;
+  }
 
   const purchases = listPurchases(clientId, 50).map((p) =>
     p.status === "checking" ? refreshOffer(p) : p.status === "paid" ? settleMockPayout(p) : p
   );
+  const creditClientId = clientId === "all" ? "swapmore-in" : clientId;
   return NextResponse.json({
     purchases,
-    credit: creditBalance(clientId),
-    opening: openingCredit(clientId),
-    ledger: creditHistory(clientId, 30),
-    storeVpa: getSetting(`payout_vpa:${clientId}`) || "",
+    credit: creditBalance(creditClientId),
+    opening: openingCredit(creditClientId),
+    ledger: creditHistory(creditClientId, 30),
+    storeVpa: clientId === "all" ? "" : (getSetting(`payout_vpa:${clientId}`) || ""),
     razorpayLive: razorpayConfigured(),
     isSuper: user.role === "super",
   });
