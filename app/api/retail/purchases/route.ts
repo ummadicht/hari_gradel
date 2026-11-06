@@ -9,15 +9,24 @@ import { createPurchase, listPurchases, refreshOffer, settleMockPayout, creditBa
 export async function GET(req: NextRequest) {
   const user = await portalUser();
   if (!user) return NextResponse.json({ error: "auth required" }, { status: 401 });
-  const scope = scopedClient(user, req.nextUrl.searchParams.get("client"), isClientId);
-  if (!scope.ok) return NextResponse.json({ error: scope.error }, { status: scope.status });
+
+  const requested = req.nextUrl.searchParams.get("client");
+  let clientId = "";
+  if (user.role === "super" && requested === "all") {
+    clientId = "all";
+  } else {
+    const scope = scopedClient(user, requested, isClientId);
+    if (!scope.ok) return NextResponse.json({ error: scope.error }, { status: scope.status });
+    clientId = scope.clientId;
+  }
 
   // Refresh offers + settle mock payouts lazily on read — the desk polls this
   // list while a check runs or a mock payout is settling.
-  const purchases = listPurchases(scope.clientId).map((p) =>
+  const purchases = listPurchases(clientId).map((p) =>
     p.status === "checking" ? refreshOffer(p) : p.status === "paid" ? settleMockPayout(p) : p
   );
-  return NextResponse.json({ purchases, credit: creditBalance(scope.clientId) });
+  const creditClientId = clientId === "all" ? "swapmore-in" : clientId;
+  return NextResponse.json({ purchases, credit: creditBalance(creditClientId) });
 }
 
 export async function POST(req: NextRequest) {
