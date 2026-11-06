@@ -836,7 +836,8 @@ function Sessions({
       setSel(jumpTo);
       onJumped?.();
     }
-  }, [jumpTo, onJumped]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpTo]);
 
   useEffect(() => {
     setRows(null);
