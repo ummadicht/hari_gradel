@@ -180,6 +180,11 @@ export function getPurchase(id: string): Purchase | null {
 }
 
 export function listPurchases(clientId: string, limit = 30): Purchase[] {
+  if (clientId === "all") {
+    return (db
+      .prepare("SELECT * FROM purchases ORDER BY created_at DESC LIMIT ?")
+      .all(limit) as Record<string, unknown>[]).map(hydrate);
+  }
   return (db
     .prepare("SELECT * FROM purchases WHERE client_id = ? ORDER BY created_at DESC LIMIT ?")
     .all(clientId, limit) as Record<string, unknown>[]).map(hydrate);
