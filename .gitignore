@@ -47,3 +47,4 @@ data/uploads/
 Thumbs.db
 
 .tmp-test/
+gradeiq.env

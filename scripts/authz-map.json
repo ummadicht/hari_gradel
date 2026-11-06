@@ -8,6 +8,16 @@
     "server-key": "SwapUp's server via x-gradeiq-server-key (hasServerKey / paidCaller), or staff"
   },
   "routes": {
+    "app/api/sensor-scans/route.ts": {
+      "GET": {
+        "class": "staff",
+        "note": "portal authentication required; tenant-scoped through scopedClient, with cross-tenant access reserved for super users"
+      },
+      "POST": {
+        "class": "staff",
+        "note": "portal authentication required; sensor scans, stores, diagnostic reports and linked sessions must remain tenant-scoped"
+      }
+    },
     "app/api/clients/[clientId]/pricebook/route.ts": {
       "POST": { "class": "service", "note": "swapmore-svc token, or without Keycloak x-sync-secret = PRICEBOOK_SYNC_SECRET (constant time)" },
       "GET": { "class": "anonymous", "note": "pricing is not secret; read by the console" }

@@ -98,6 +98,14 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const user = await portalUser();
+
+  if (!user) {
+    return NextResponse.json(
+      { error: "auth required" },
+      { status: 401 }
+    );
+  }
+
   const body = await req.json().catch(() => ({}));
 
   const rawClient = String(body.client ?? body.clientId ?? "default").toLowerCase().trim();
